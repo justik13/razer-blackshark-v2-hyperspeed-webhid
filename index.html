@@ -398,10 +398,10 @@
     </div>
     <div class="range-group">
       <div style="display:flex; justify-content:space-between; font-size:13px;">
-        <span>Громкость Sidetone:</span>
+        <span>Громкость Sidetone (аппаратная, 0–15):</span>
         <span id="sidetoneVal">10</span>
       </div>
-      <input type="range" id="sidetoneLevel" min="0" max="10" value="10" disabled>
+      <input type="range" id="sidetoneLevel" min="0" max="15" value="10" disabled>
     </div>
     <div style="display:flex; align-items:center; gap:10px; margin-top:4px; padding-top:10px; border-top:1px solid var(--card-border);">
       <button id="testMicBtn" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;">Активировать микрофон</button>
@@ -409,8 +409,18 @@
         <div id="micMeter" style="width:0%; height:100%; background:var(--razer); transition:width 0.05s;"></div>
       </div>
     </div>
-    <div style="font-size:11px; color:var(--text-muted);">
-      * Если Sidetone не слышен: убедитесь, что штанга микрофона плотно вставлена, круглая кнопка Mute на левой чашке отжата, или нажмите «Активировать микрофон».
+    <div id="delayMonitorBox" style="margin-top:10px; padding:10px; background:rgba(0,0,0,0.25); border-radius:6px; border:1px solid var(--card-border);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+          <input type="checkbox" id="micDelayToggle">
+          <span>Программный мониторинг с задержкой</span>
+        </label>
+        <span id="micDelayVal" style="font-size:11px; color:var(--razer);">120 мс</span>
+      </div>
+      <input type="range" id="micDelayRange" min="20" max="400" step="10" value="120" style="width:100%;">
+    </div>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+      * Аппаратный Sidetone работает на чипе без задержки. Если собственный голос сбивает речь: увеличьте аппаратную громкость (12–15) либо включите программный мониторинг с регулируемой задержкой.
     </div>
   </div>
 
@@ -431,13 +441,19 @@
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
       <div class="presets-row">
         <button class="preset-btn" id="pre_flat" onclick="loadPreset([0,0,0,0,0,0,0,0,0,0], this)">Flat (0 dB)</button>
-        <button class="preset-btn" id="pre_bass" onclick="loadPreset([1,1,0,0,0,0,0,0,0,0], this)">Bass+ (+1 dB)</button>
-        <button class="preset-btn" id="pre_music" onclick="loadPreset([3,3,2,0,1,1,1,1,1,-3], this)">Music</button>
-        <button class="preset-btn" id="pre_game" onclick="loadPreset([-7,-5,-3,-3,3,4,-2,-3,-3,-3], this)">Game (Шаги)</button>
-        <button class="preset-btn" id="pre_autoeq" onclick="loadPreset([6,6,-4,2,4,0,-4,2,-3,10], this)">AutoEQ (Rtings)</button>
+        <button class="preset-btn" id="pre_bass" onclick="loadPreset([2,2,1,0,0,0,0,0,0,0], this)">Bass+</button>
+        <button class="preset-btn" id="pre_music" onclick="loadPreset([2,1,0,-2,0,0,1,1,2,1], this)">Music</button>
+        <button class="preset-btn" id="pre_game" onclick="loadPreset([-2,-2,-1,0,0,1,2,2,1,0], this)">Game (Шаги)</button>
+        <button class="preset-btn" id="pre_harman" onclick="loadPreset([1,0,-1,-2,0,0,1,1,2,0], this)">Neutral (Harman)</button>
         <button id="resetFlatBtn" class="btn btn-secondary" style="padding:4px 10px; font-size:11px; border-color:rgba(0,255,0,0.4); color:var(--razer);" onclick="resetToFactoryFlat()">Сбросить в 0 dB</button>
       </div>
-      <button id="testAudioBtn" class="btn btn-secondary" style="padding:5px 12px; font-size:11px;">Тестовый звук</button>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <span style="font-size: 11px; color: var(--text-muted);">ROM:</span>
+        <button class="preset-btn" id="pre_rom_music" onclick="selectRomPreset(0x08, this)">Music</button>
+        <button class="preset-btn" id="pre_rom_game" onclick="selectRomPreset(0x07, this)">Game</button>
+        <button class="preset-btn" id="pre_rom_movie" onclick="selectRomPreset(0x09, this)">Movie</button>
+        <button id="testAudioBtn" class="btn btn-secondary" style="padding:5px 12px; font-size:11px; margin-left:4px;">Тестовый звук</button>
+      </div>
     </div>
 
     <div class="eq-grid" id="eqGrid"></div>
@@ -529,6 +545,23 @@
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
     if (btnEl) btnEl.classList.add('active');
     triggerEqLivePreview();
+  };
+
+  window.selectRomPreset = async function(presetId, btnEl) {
+    if (!hidDevice || !hidDevice.opened) return;
+    try {
+      const domain = getAudioDomain();
+      const p = buildReport(0x05, domain, 0x93, 0x01, [presetId]);
+      await hidDevice.sendReport(0x02, p);
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      if (btnEl) btnEl.classList.add('active');
+      const names = { 0x07: "Game (ROM)", 0x08: "Music (ROM)", 0x09: "Movie (ROM)" };
+      log(`Активирован заводской ROM-пресет: ${names[presetId] || presetId}`);
+      await new Promise(r => setTimeout(r, 60));
+      await sendQuery(0x13);
+    } catch (e) {
+      log(`Ошибка выбора ROM-пресета: ${e.message}`);
+    }
   };
 
   // Определение целевой коллекции управления MediaTek (Usage Page 0xFF14 / 0xFF00 или Report ID 2)
@@ -1089,34 +1122,82 @@
     log("Тестовый звук остановлен");
   }
 
-  // 7. Активация и тест микрофона (для гарантированного пробуждения Sidetone в Windows)
+  // 7. Активация и тест микрофона с опциональной задержкой
   let micStream = null;
   let micMeterAnim = null;
+  let micAudioCtx = null;
+  let micDelayNode = null;
+  let micGainNode = null;
+
+  document.getElementById('micDelayRange').oninput = (e) => {
+    const ms = parseInt(e.target.value);
+    document.getElementById('micDelayVal').innerText = ms + ' мс';
+    if (micDelayNode && micAudioCtx) {
+      micDelayNode.delayTime.setValueAtTime(ms / 1000, micAudioCtx.currentTime);
+    }
+  };
+
+  document.getElementById('micDelayToggle').onchange = () => {
+    updateDelayMonitoring();
+  };
+
+  function updateDelayMonitoring() {
+    if (!micAudioCtx || !micGainNode) return;
+    const enabled = document.getElementById('micDelayToggle').checked;
+    if (enabled) {
+      try {
+        micGainNode.connect(micAudioCtx.destination);
+        log(`Программный мониторинг микрофона включён (задержка: ${document.getElementById('micDelayRange').value} мс)`);
+      } catch (err) {}
+    } else {
+      try {
+        micGainNode.disconnect(micAudioCtx.destination);
+        log("Программный мониторинг микрофона отключён");
+      } catch (err) {}
+    }
+  }
 
   document.getElementById('testMicBtn').onclick = async () => {
     const btn = document.getElementById('testMicBtn');
     if (micStream) {
+      if (micGainNode && micAudioCtx) {
+        try { micGainNode.disconnect(); } catch(e) {}
+      }
       micStream.getTracks().forEach(t => t.stop());
       micStream = null;
       if (micMeterAnim) cancelAnimationFrame(micMeterAnim);
       document.getElementById('micMeter').style.width = '0%';
-      btn.innerText = "🎤 Активировать микрофон";
+      btn.innerText = "Активировать микрофон";
       btn.classList.remove('btn');
       btn.classList.add('btn-secondary');
       log("Захват микрофона остановлен");
     } else {
       try {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        btn.innerText = "⏹ Остановить микрофон";
+        btn.innerText = "Остановить микрофон";
         btn.classList.remove('btn-secondary');
         btn.classList.add('btn');
         log("Микрофон активирован в Windows. Аппаратный Sidetone активен!");
 
-        const mCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const src = mCtx.createMediaStreamSource(micStream);
-        const analyser = mCtx.createAnalyser();
+        micAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (micAudioCtx.state === 'suspended') await micAudioCtx.resume();
+        const src = micAudioCtx.createMediaStreamSource(micStream);
+        const analyser = micAudioCtx.createAnalyser();
         analyser.fftSize = 64;
         src.connect(analyser);
+
+        // Цепочка программной задержки
+        const delaySeconds = parseInt(document.getElementById('micDelayRange').value) / 1000;
+        micDelayNode = micAudioCtx.createDelay(1.0);
+        micDelayNode.delayTime.value = delaySeconds;
+
+        micGainNode = micAudioCtx.createGain();
+        micGainNode.gain.value = 1.0;
+
+        src.connect(micDelayNode);
+        micDelayNode.connect(micGainNode);
+
+        updateDelayMonitoring();
 
         const data = new Uint8Array(analyser.frequencyBinCount);
         function updateMeter() {

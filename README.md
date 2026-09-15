@@ -28,13 +28,13 @@ The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project c
 - **Battery Level and Charging State**: Percentage readout (0–100%) with visual level indicator and charging detection (`0x21` / `0x2A`).
 - **Auto Power-Off Timer**: Sleep timer configuration (15, 30, 45, 60 minutes, or off) written directly to device memory (`0xAC`).
 - **Wireless Dongle LED Control**: Select link status (white), battery status (green/yellow/red), or low-battery warning only (`0xE6`).
-- **Microphone Sidetone**: Sidetone toggle and volume slider (0–10). Includes a browser mic session toggle and VU meter to prevent the recording pipeline from suspending.
+- **Microphone Sidetone**: Sidetone toggle and hardware volume slider (0–15, accessing the full hardware register range beyond Synapse's 0–10 cap). Includes optional software monitoring with configurable delay (20–400 ms) and VU meter.
 - **10-Band Hardware Equalizer**:
   - Writes directly to headset onboard flash memory. Curves persist across reboots, consoles, mobile devices, and separate PCs.
   - **Live Preview mode**: Auditions slider adjustments in real time with 60 ms debouncing.
   - **DSP Latching**: Sends an immediate re-apply sequence to prevent the firmware from staying one write behind.
   - **Hardware Offset Calibration**: Compensates for the internal MediaTek -5 dB storage offset so output stays at full unity volume.
-  - **Presets**: Flat (0 dB), Bass+ (+1 dB), Music, Game, and AutoEQ (Rtings target).
+  - **Presets**: Flat (0 dB), Bass+, Music (clean V-shape), Game (footstep clarity), Neutral (Harman target), and direct access to factory ROM presets (Game, Music, Movie).
   - **Audio Test Generator**: Built-in Web Audio tone and noise synthesizer to verify response changes immediately.
 
 ---
@@ -87,8 +87,8 @@ payload[61] = checksum;
 | `0xE6` | `0x00` | SET | `0x05` | `1` | Set Dongle LED (`1` = Link status, `2` = Battery, `3` = Warning) |
 | `0x18` | `0x80` | GET | `0x04` | `0` | Sidetone state (`0` = off, `1` = on) |
 | `0x98` | `0x80` | SET | `0x05` | `1` | Enable or disable sidetone (`0` or `1`) |
-| `0x19` | `0x80` | GET | `0x04` | `0` | Sidetone volume query (`0..10`) |
-| `0x99` | `0x80` | SET | `0x05` | `1` | Set sidetone volume level (`0..10`) |
+| `0x19` | `0x80` / `0x00` | GET | `0x04` | `0` | Sidetone volume query (`0..15`) |
+| `0x99` | `0x80` / `0x00` | SET | `0x05` | `1` | Set sidetone volume level (`0..15`) |
 | `0x13` | `0x80` | GET | `0x04` | `0` | Active EQ preset query |
 | `0x93` | `0x80` | SET | `0x05` | `1` | Set EQ preset (`0x07` Game, `0x08` Music, `0x09` Movie, `0xFF` Custom) |
 | `0x15` | `0x80` | GET | `0x04` | `0` | Read 10-band EQ curve from active preset |
