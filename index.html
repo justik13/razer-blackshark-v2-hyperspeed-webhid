@@ -328,6 +328,40 @@
       height: 90px;
       overflow-y: auto;
     }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    @media (max-width: 480px) {
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .info-item {
+      background: #0f1115;
+      border: 1px solid var(--card-border);
+      padding: 10px 14px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .info-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      font-family: Consolas, Monaco, monospace;
+    }
   </style>
 </head>
 <body>
@@ -352,6 +386,32 @@
     </div>
   </div>
 
+  <!-- Device Info Card -->
+  <div class="card" id="deviceInfoCard" style="display: none;">
+    <div class="card-title">
+      <span>Информация об устройстве</span>
+      <span id="devConnBadge" class="logo-badge" style="font-size: 10px;">--</span>
+    </div>
+    <div class="info-grid">
+      <div class="info-item">
+        <span class="info-label">Серийный номер</span>
+        <span class="info-val" id="devSerial">--</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Версия прошивки</span>
+        <span class="info-val" id="devFirmware">--</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Кнопка микрофона (Mute)</span>
+        <span class="info-val" id="devMicBtn">--</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Режим подключения</span>
+        <span class="info-val" id="devMode">--</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Battery Card -->
   <div class="card">
     <div class="card-title">Батарея и питание</div>
@@ -369,16 +429,22 @@
       <span>Автоотключение при простое</span>
       <select id="sleepSelect" disabled>
         <option value="0">Выключено</option>
+        <option value="5">5 минут</option>
+        <option value="10">10 минут</option>
         <option value="15">15 минут</option>
+        <option value="20">20 минут</option>
         <option value="30">30 минут</option>
         <option value="45">45 минут</option>
         <option value="60">60 минут</option>
+        <option value="90">90 минут</option>
+        <option value="120">120 минут (2 часа)</option>
       </select>
     </div>
 
     <div class="row">
       <span>Индикатор LED на донгле</span>
       <select id="ledSelect" disabled>
+        <option value="0">Выключен (Off)</option>
         <option value="1">Статус подключения (Белый)</option>
         <option value="2">Статус батареи (Зел / Желт / Красн)</option>
         <option value="3">Предупреждение о разряде (Мигающий)</option>
@@ -684,9 +750,9 @@
       // Полная синхронизация текущих настроек
       await syncHeadsetState();
 
-      // Автоматический опрос батареи каждые 30 секунд
+      // Автоматический опрос батареи и кнопки микрофона каждые 15 секунд
       if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(queryBattery, 30000);
+      pollTimer = setInterval(queryStatus, 15000);
     } catch (e) {
       log("Ошибка инициализации: " + e.message);
     }
@@ -700,6 +766,8 @@
     document.getElementById('batteryNum').innerText = "--%";
     document.getElementById('chargingStatus').innerText = "Устройство отключено";
     document.getElementById('batteryFill').style.width = "0%";
+    const cardEl = document.getElementById('deviceInfoCard');
+    if (cardEl) cardEl.style.display = "none";
   }
 
   function enableControls(enabled) {
@@ -754,8 +822,34 @@
     const cmd = d[9];
     const val = d[12];
 
+    // 0x00: Серийный номер
+    if (cmd === 0x00) {
+      const len = d[11] || 15;
+      const serial = String.fromCharCode(...d.slice(12, 12 + len)).replace(/\0/g, '').trim();
+      if (serial) {
+        const el = document.getElementById('devSerial');
+        if (el) el.innerText = serial;
+        log(`Серийный номер гарнитуры: ${serial}`);
+      }
+    }
+    // 0x02: Версия прошивки
+    else if (cmd === 0x02) {
+      const fwStr = `v${d[12]}.${d[13].toString().padStart(2, '0')}.${d[14]}.${d[15]}`;
+      const el = document.getElementById('devFirmware');
+      if (el) el.innerText = fwStr;
+      log(`Версия прошивки гарнитуры: ${fwStr}`);
+    }
+    // 0x55: Кнопка микрофона на чашке
+    else if (cmd === 0x55) {
+      const isMuted = (val === 1);
+      const el = document.getElementById('devMicBtn');
+      if (el) {
+        el.innerText = isMuted ? "🔴 Заглушен (Mute)" : "🟢 Включен";
+        el.style.color = isMuted ? "var(--danger)" : "var(--razer)";
+      }
+    }
     // 0x21: Батарея
-    if (cmd === 0x21) {
+    else if (cmd === 0x21) {
       if (val >= 0 && val <= 100) {
         updateBatteryUI(val);
         log(`Батарея: ${val}%`);
@@ -771,7 +865,15 @@
     }
     // 0x2C: Таймер сна
     else if (cmd === 0x2C) {
-      document.getElementById('sleepSelect').value = val;
+      const select = document.getElementById('sleepSelect');
+      let opt = Array.from(select.options).find(o => parseInt(o.value) === val);
+      if (!opt) {
+        opt = document.createElement('option');
+        opt.value = val;
+        opt.innerText = `${val} минут`;
+        select.appendChild(opt);
+      }
+      select.value = val;
       log(`Таймер сна гарнитуры: ${val} мин`);
     }
     // 0x18: Sidetone On/Off
@@ -787,7 +889,15 @@
     }
     // 0x66: Режим LED донгла
     else if (cmd === 0x66) {
-      document.getElementById('ledSelect').value = val;
+      const select = document.getElementById('ledSelect');
+      let opt = Array.from(select.options).find(o => parseInt(o.value) === val);
+      if (!opt) {
+        opt = document.createElement('option');
+        opt.value = val;
+        opt.innerText = `Режим ${val}`;
+        select.appendChild(opt);
+      }
+      select.value = val;
       log(`Режим LED донгла: ${val}`);
     }
     // 0x13: Активный пресет EQ
@@ -847,30 +957,46 @@
     }
   }
 
-  async function queryBattery() {
+  async function queryStatus() {
     await sendQuery(0x21); // Battery
     await new Promise(r => setTimeout(r, 60));
     await sendQuery(0x2A); // Charging
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x55); // Mic mute button
   }
 
   async function syncHeadsetState() {
     log("Синхронизация состояния гарнитуры...");
+    const is24G = hidDevice && hidDevice.productId === PID_24G;
+    const cardEl = document.getElementById('deviceInfoCard');
+    if (cardEl) cardEl.style.display = "flex";
+    const badgeEl = document.getElementById('devConnBadge');
+    if (badgeEl) badgeEl.innerText = is24G ? "2.4G Wireless" : "USB Type-C";
+    const modeEl = document.getElementById('devMode');
+    if (modeEl) modeEl.innerText = is24G ? "2.4 GHz Dongle" : "USB-C Wired";
+
+    await sendQuery(0x00); // Serial number
+    await new Promise(r => setTimeout(r, 50));
+    await sendQuery(0x02); // Firmware version
+    await new Promise(r => setTimeout(r, 50));
+    await sendQuery(0x55); // Mic mute button
+    await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x21); // Battery
-    await new Promise(r => setTimeout(r, 60));
+    await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x2A); // Charging
-    await new Promise(r => setTimeout(r, 60));
+    await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x2C); // Sleep timer
-    await new Promise(r => setTimeout(r, 60));
+    await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x18); // Sidetone state
-    await new Promise(r => setTimeout(r, 60));
+    await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x19); // Sidetone level
-    await new Promise(r => setTimeout(r, 60));
-    if (hidDevice && hidDevice.productId === PID_24G) {
+    await new Promise(r => setTimeout(r, 50));
+    if (is24G) {
       await sendQuery(0x66, 0x00); // LED mode (только для 2.4G донгла)
-      await new Promise(r => setTimeout(r, 60));
+      await new Promise(r => setTimeout(r, 50));
     }
     await sendQuery(0x13); // Active preset
-    await new Promise(r => setTimeout(r, 60));
+    await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x15); // Hardware EQ bands
   }
 

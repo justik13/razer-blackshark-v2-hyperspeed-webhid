@@ -25,9 +25,10 @@ The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project c
 
 ## Features
 
-- **Battery Level and Charging State**: Percentage readout (0–100%) with visual level indicator and charging detection (`0x21` / `0x2A`).
-- **Auto Power-Off Timer**: Sleep timer configuration (15, 30, 45, 60 minutes, or off) written directly to device memory (`0xAC`).
-- **Wireless Dongle LED Control**: Select link status (white), battery status (green/yellow/red), or low-battery warning only (`0xE6`).
+- **Device Hardware Info**: Live readout of device serial number (`0x00`), firmware version (`0x02`), physical microphone mute button status (`0x55`), and connection transport mode.
+- **Battery Level and Charging State**: Percentage readout (0–100%) with visual level indicator and USB charging detection (`0x21` / `0x2A`).
+- **Auto Power-Off Timer**: Sleep timer configuration written directly to device memory (`0xAC`). Supports arbitrary timeouts (0–255 minutes; presets include 5, 10, 15, 20, 30, 45, 60, 90, 120 min, or off).
+- **Wireless Dongle LED Control**: Select Off (`0`), link status (white, `1`), battery status (green/yellow/red, `2`), or low-battery warning only (`3`) via register `0xE6`.
 - **Microphone Sidetone**: Sidetone toggle and hardware volume slider (0–15, accessing the full hardware register range beyond Synapse's 0–10 cap). Includes optional software monitoring with configurable delay (20–400 ms) and VU meter.
 - **10-Band Hardware Equalizer**:
   - Writes directly to headset onboard flash memory. Curves persist across reboots, consoles, mobile devices, and separate PCs.
@@ -79,12 +80,15 @@ payload[61] = checksum;
 
 | Command ID | Domain | Action | Length | Count | Description / Values |
 | :--- | :---: | :---: | :---: | :---: | :--- |
+| `0x00` | `0x80` | GET | `0x04` | `0` | Headset Serial Number (15 ASCII characters) |
+| `0x02` | `0x80` | GET | `0x04` | `0` | Firmware Version (4 bytes: major, minor, build, rev) |
 | `0x21` | `0x80` | GET | `0x04` | `0` | Battery level (`0..100%`) |
 | `0x2A` | `0x80` | GET | `0x04` | `0` | Charging state (`0` = battery, `>0` = charging) |
-| `0x2C` | `0x80` | GET | `0x04` | `0` | Auto power-off timeout (minutes) |
-| `0xAC` | `0x80` | SET | `0x05` | `1` | Set auto power-off (`0, 15, 30, 45, 60` min) |
+| `0x2C` | `0x80` | GET | `0x04` | `0` | Auto power-off timeout query (minutes) |
+| `0xAC` | `0x80` | SET | `0x05` | `1` | Set auto power-off timeout (`0..255` minutes; `0` = off) |
+| `0x55` | `0x80` | GET | `0x04` | `0` | Hardware Mic Mute button status (`0` = unmuted, `1` = muted) |
 | `0x66` | `0x00` | GET | `0x04` | `0` | Dongle LED mode query |
-| `0xE6` | `0x00` | SET | `0x05` | `1` | Set Dongle LED (`1` = Link status, `2` = Battery, `3` = Warning) |
+| `0xE6` | `0x00` | SET | `0x05` | `1` | Set Dongle LED (`0` = Off, `1` = Link status, `2` = Battery, `3` = Warning) |
 | `0x18` | `0x80` | GET | `0x04` | `0` | Sidetone state (`0` = off, `1` = on) |
 | `0x98` | `0x80` | SET | `0x05` | `1` | Enable or disable sidetone (`0` or `1`) |
 | `0x19` | `0x80` / `0x00` | GET | `0x04` | `0` | Sidetone volume query (`0..15`) |
@@ -95,6 +99,14 @@ payload[61] = checksum;
 | `0x95` | `0x80` | SET | `0x0E` | `10` | Write 10-band EQ curve |
 
 ### 4. Firmware Details
+
+#### Hardware Onboard vs Synapse Software Architecture
+Live reverse-engineering of the firmware clarifies what runs on the headset microcontroller vs what Razer Synapse handled in Windows software:
+- **Onboard Hardware Features**: EQ filter coefficients (`0x95`), ROM presets (`0x93`), hardware sidetone loopback & volume (`0x98`/`0x99`), sleep timer (`0xAC`), mute detection (`0x55`), and dongle LED mode (`0xE6`) are stored in internal non-volatile memory and function identically on consoles (PS5, Nintendo Switch) and mobile devices.
+- **Synapse Software Filters**: THX Spatial Audio, Mic Noise Gate, Voice Clarity, and Mic Equalizer were implemented purely as Windows Audio Processing Objects (APO) in software drivers, not inside the headset DSP.
+
+#### Arbitrary Sleep Timer Timeout
+Synapse restricted the sleep timer dropdown to 15, 30, 45, or 60 minutes. The underlying MediaTek firmware stores the timeout as a raw 8-bit unsigned integer (minutes). Any value from `1` to `255` minutes (such as 5, 10, or 20 minutes) is natively supported by the hardware. Setting `0` disables the sleep timer entirely.
 
 #### MediaTek -5 dB Storage Offset
 The MediaTek DSP subtracts 5 from each band written via `0x95` before committing it to internal memory: `gain_stored = wire_val - 5`. Writing literal zeros for a flat curve stores -5 dB across all bands, cutting overall output and damping low-end punch.
