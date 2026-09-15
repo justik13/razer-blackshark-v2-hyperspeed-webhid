@@ -348,7 +348,7 @@
       <button id="refreshBtn" class="btn btn-secondary" disabled>Обновить статус</button>
     </div>
     <div style="font-size: 12px; color: var(--text-muted);">
-      * Работает в Chrome / Edge. Подключение через 2.4G USB-донгл или провод Type-C. <strong>Razer Synapse должен быть закрыт</strong>.
+      * Работает в Chrome / Edge. Подключение через 2.4G USB-донгл или провод Type-C. <strong>Razer Synapse должен быть закрыт</strong>. При подключении по проводу убедитесь, что питание гарнитуры включено.
     </div>
   </div>
 
@@ -525,6 +525,24 @@
     triggerEqLivePreview();
   };
 
+  // Определение целевой коллекции управления MediaTek (Usage Page 0xFF14 / 0xFF00 или Report ID 2)
+  function isControlDevice(dev) {
+    if (!dev || !dev.collections) return false;
+    for (const col of dev.collections) {
+      if (col.usagePage === 0xFF14 || col.usagePage === 0xFF00) return true;
+      const hasOut2 = (col.outputReports || []).some(r => r.reportId === 2);
+      const hasIn2 = (col.inputReports || []).some(r => r.reportId === 2);
+      if (hasOut2 || hasIn2) return true;
+    }
+    return false;
+  }
+
+  function selectTargetDevice(devList) {
+    if (!devList || devList.length === 0) return null;
+    const match = devList.find(d => isControlDevice(d));
+    return match || devList[0];
+  }
+
   // Автоматическое подключение, если разрешение уже выдано ранее
   window.addEventListener('DOMContentLoaded', async () => {
     if (!('hid' in navigator)) {
@@ -542,13 +560,16 @@
 
     navigator.hid.addEventListener('connect', async (event) => {
       if (event.device.vendorId === VID && SUPPORTED_PIDS.includes(event.device.productId)) {
-        log("Обнаружено подключение гарнитуры. Инициализация...");
-        await initializeDevice(event.device);
+        if (isControlDevice(event.device)) {
+          log("Обнаружено подключение интерфейса управления. Инициализация...");
+          await initializeDevice(event.device);
+        }
       }
     });
 
     const devices = await navigator.hid.getDevices();
-    const target = devices.find(d => d.vendorId === VID && SUPPORTED_PIDS.includes(d.productId));
+    const candidates = devices.filter(d => d.vendorId === VID && SUPPORTED_PIDS.includes(d.productId));
+    const target = selectTargetDevice(candidates);
     if (target) {
       log("Найдено сопряжённое устройство. Подключение...");
       await initializeDevice(target);
@@ -557,17 +578,34 @@
 
   document.getElementById('connectBtn').onclick = async () => {
     try {
-      // Строгий фильтр: показываем только BlackShark V2 HS, исключая мыши и клавиатуры
-      const devices = await navigator.hid.requestDevice({
-        filters: SUPPORTED_PIDS.map(pid => ({ vendorId: VID, productId: pid }))
+      // Строгая фильтрация интерфейса управления MediaTek: Usage Page 0xFF14 / 0xFF00
+      // Это изолирует командный порт от регулятора громкости и телефонии
+      const filters = [];
+      SUPPORTED_PIDS.forEach(pid => {
+        filters.push({ vendorId: VID, productId: pid, usagePage: 0xFF14 });
+        filters.push({ vendorId: VID, productId: pid, usagePage: 0xFF00 });
       });
+
+      let devices = [];
+      try {
+        devices = await navigator.hid.requestDevice({ filters });
+      } catch (err) {
+        log("Запрос по usagePage не удался, пробуем общий фильтр: " + err.message);
+      }
+
+      if (!devices || devices.length === 0) {
+        devices = await navigator.hid.requestDevice({
+          filters: SUPPORTED_PIDS.map(pid => ({ vendorId: VID, productId: pid }))
+        });
+      }
 
       if (!devices || devices.length === 0) {
         log("Устройство не выбрано в окне браузера");
         return;
       }
 
-      await initializeDevice(devices[0]);
+      const target = selectTargetDevice(devices);
+      await initializeDevice(target);
     } catch (err) {
       log("Ошибка запроса устройства: " + err.message);
     }
@@ -582,7 +620,23 @@
 
       document.getElementById('connectionStatus').innerText = "● Подключено: " + (hidDevice.productName || "Razer BlackShark V2 HS");
       document.getElementById('connectionStatus').style.color = "var(--razer)";
-      log(`Успешно открыт интерфейс: ${hidDevice.productName}`);
+      log(`Успешно открыт интерфейс: ${hidDevice.productName} (PID: 0x${hidDevice.productId.toString(16)})`);
+
+      // Диагностика HID-коллекций интерфейса
+      let hasReport2 = false;
+      for (const col of hidDevice.collections || []) {
+        const outIds = (col.outputReports || []).map(r => '0x' + r.reportId.toString(16)).join(', ') || 'нет';
+        const inIds = (col.inputReports || []).map(r => '0x' + r.reportId.toString(16)).join(', ') || 'нет';
+        log(`Коллекция: usagePage=0x${col.usagePage.toString(16)}, usage=0x${col.usage.toString(16)} | Out: [${outIds}] | In: [${inIds}]`);
+        if ((col.outputReports || []).some(r => r.reportId === 2) || (col.inputReports || []).some(r => r.reportId === 2)) {
+          hasReport2 = true;
+        }
+      }
+      if (!hasReport2 && (hidDevice.collections || []).length > 0) {
+        log("ВНИМАНИЕ: В открытом интерфейсе нет Report ID 0x02. Команды могут не доходить до DSP.");
+      } else {
+        log("Порт управления Report ID 0x02 готов к обмену данными.");
+      }
 
       enableControls(true);
 
@@ -612,7 +666,8 @@
   function enableControls(enabled) {
     document.getElementById('refreshBtn').disabled = !enabled;
     document.getElementById('sleepSelect').disabled = !enabled;
-    document.getElementById('ledSelect').disabled = !enabled;
+    const is24G = hidDevice && hidDevice.productId === PID_24G;
+    document.getElementById('ledSelect').disabled = !enabled || !is24G;
     document.getElementById('sidetoneToggle').disabled = !enabled;
     document.getElementById('sidetoneLevel').disabled = !enabled;
     document.getElementById('applyEqBtn').disabled = !enabled;
@@ -650,6 +705,10 @@
   // Обработка входящих репортов гарнитуры
   function handleInputReport(event) {
     const d = new Uint8Array(event.data.buffer);
+    if (event.reportId !== 0x02) {
+      log(`<- Нецелевой HID-репорт ID=0x${event.reportId.toString(16)}, длина=${d.length}`);
+      return;
+    }
     if (d.length < 13) return;
 
     // В ответе: d[8]=0x80, d[9]=CMD, d[10]=0x01, d[11]=0x01, d[12]=VALUE
@@ -742,6 +801,7 @@
     try {
       const p = buildReport(0x04, domain, cmdByte, 0x00, []);
       await hidDevice.sendReport(0x02, p);
+      log(`-> Запрос 0x${cmdByte.toString(16)} (домен 0x${domain.toString(16)})`);
     } catch (e) {
       log(`Ошибка отправки query 0x${cmdByte.toString(16)}: ${e.message}`);
     }
@@ -765,8 +825,10 @@
     await new Promise(r => setTimeout(r, 60));
     await sendQuery(0x19); // Sidetone level
     await new Promise(r => setTimeout(r, 60));
-    await sendQuery(0x66, 0x00); // LED mode
-    await new Promise(r => setTimeout(r, 60));
+    if (hidDevice && hidDevice.productId === PID_24G) {
+      await sendQuery(0x66, 0x00); // LED mode (только для 2.4G донгла)
+      await new Promise(r => setTimeout(r, 60));
+    }
     await sendQuery(0x13); // Active preset
     await new Promise(r => setTimeout(r, 60));
     await sendQuery(0x15); // Hardware EQ bands
