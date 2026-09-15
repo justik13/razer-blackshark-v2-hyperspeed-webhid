@@ -4,7 +4,7 @@
 [![WebHID](https://img.shields.io/badge/WebHID-Chrome%20%7C%20Edge%20%7C%20Brave-blue.svg)](https://developer.mozilla.org/en-US/docs/Web/API/WebHID_API)
 [![GitHub Pages](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-brightgreen.svg)](https://justik13.github.io/razer-blackshark-v2-hyperspeed-webhid/)
 
-Browser-based hardware controller and protocol documentation for the Razer BlackShark V2 HyperSpeed headset (USB 1532:0565 / 1532:0566).
+Browser-based hardware controller and protocol documentation for the Razer BlackShark V2 HyperSpeed headset (USB 1532:0565 / 1532:056E).
 
 Runs directly in WebHID-enabled browsers (Chrome, Edge, Brave, Opera) on Windows, macOS, Linux, and ChromeOS without Razer Synapse, background services, or custom kernel modules.
 
@@ -17,7 +17,7 @@ Runs directly in WebHID-enabled browsers (Chrome, Edge, Brave, Opera) on Windows
 | Device | Connection | USB VID:PID | Status |
 | :--- | :--- | :--- | :---: |
 | Razer BlackShark V2 HyperSpeed | 2.4 GHz Wireless Dongle | `1532:0565` | Supported |
-| Razer BlackShark V2 HyperSpeed | USB Type-C Wired | `1532:0566` | Supported |
+| Razer BlackShark V2 HyperSpeed | USB Type-C Wired | `1532:056E` | Supported |
 
 The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project covers the MediaTek Inc architecture used in HyperSpeed models.
 

@@ -457,7 +457,8 @@
 <script>
   const VID = 0x1532; // Razer
   const PID_24G = 0x0565; // BlackShark V2 HS 2.4G
-  const PID_USB = 0x0566; // BlackShark V2 HS USB
+  const PID_USB = 0x056E; // BlackShark V2 HS USB (official Razer PID)
+  const SUPPORTED_PIDS = [PID_24G, PID_USB, 0x0566];
 
   let hidDevice = null;
   let counter = 0;
@@ -540,14 +541,14 @@
     });
 
     navigator.hid.addEventListener('connect', async (event) => {
-      if (event.device.vendorId === VID && (event.device.productId === PID_24G || event.device.productId === PID_USB)) {
-        log("Обнаружено подключение донгла. Инициализация...");
+      if (event.device.vendorId === VID && SUPPORTED_PIDS.includes(event.device.productId)) {
+        log("Обнаружено подключение гарнитуры. Инициализация...");
         await initializeDevice(event.device);
       }
     });
 
     const devices = await navigator.hid.getDevices();
-    const target = devices.find(d => d.vendorId === VID && (d.productId === PID_24G || d.productId === PID_USB));
+    const target = devices.find(d => d.vendorId === VID && SUPPORTED_PIDS.includes(d.productId));
     if (target) {
       log("Найдено сопряжённое устройство. Подключение...");
       await initializeDevice(target);
@@ -558,10 +559,7 @@
     try {
       // Строгий фильтр: показываем только BlackShark V2 HS, исключая мыши и клавиатуры
       const devices = await navigator.hid.requestDevice({
-        filters: [
-          { vendorId: VID, productId: PID_24G },
-          { vendorId: VID, productId: PID_USB }
-        ]
+        filters: SUPPORTED_PIDS.map(pid => ({ vendorId: VID, productId: pid }))
       });
 
       if (!devices || devices.length === 0) {
