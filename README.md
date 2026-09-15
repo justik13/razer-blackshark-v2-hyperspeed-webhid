@@ -54,7 +54,7 @@ Bytes 2-4:  0x00..0x00  Reserved padding
 Byte 5:     length      Payload length (0x04 for query, 0x05 for 1-byte set, 0x0E for 10-byte EQ)
 Byte 6:     0x00        Sub-length
 Byte 7:     0x00        Direction (0x00 = Host OUT)
-Byte 8:     domain      0x80 for Headset/DSP/Audio, 0x00 for Wireless Dongle
+Byte 8:     domain      0x80 for 2.4G RF (Headset/DSP), 0x00 for USB Wired connection (or Dongle LED)
 Byte 9:     command_id  Command opcode
 Byte 10:    0x00        ACK flag (0x00 in OUT requests, 0x01 in IN replies)
 Byte 11:    count       Number of parameter bytes (0, 1, or 10)

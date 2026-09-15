@@ -469,6 +469,12 @@
     return 0x60 | ((counter++) & 0x1F);
   }
 
+  // Домен назначения: 0x80 для беспроводного донгла 2.4G (перенаправление на гарнитуру),
+  // 0x00 для прямого проводного подключения по USB
+  function getAudioDomain() {
+    return (hidDevice && hidDevice.productId === PID_24G) ? 0x80 : 0x00;
+  }
+
   const frequencies = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
   const eqValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   let savedEqValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -796,12 +802,13 @@
   }
 
   // Одиночный запрос с таймаутом
-  async function sendQuery(cmdByte, domain = 0x80) {
+  async function sendQuery(cmdByte, domain = null) {
     if (!hidDevice || !hidDevice.opened) return;
+    const targetDomain = (domain !== null) ? domain : getAudioDomain();
     try {
-      const p = buildReport(0x04, domain, cmdByte, 0x00, []);
+      const p = buildReport(0x04, targetDomain, cmdByte, 0x00, []);
       await hidDevice.sendReport(0x02, p);
-      log(`-> Запрос 0x${cmdByte.toString(16)} (домен 0x${domain.toString(16)})`);
+      log(`-> Запрос 0x${cmdByte.toString(16)} (домен 0x${targetDomain.toString(16)})`);
     } catch (e) {
       log(`Ошибка отправки query 0x${cmdByte.toString(16)}: ${e.message}`);
     }
@@ -842,7 +849,7 @@
   document.getElementById('sleepSelect').onchange = async (e) => {
     try {
       const mins = parseInt(e.target.value);
-      const p = buildReport(0x05, 0x80, 0xAC, 0x01, [mins]);
+      const p = buildReport(0x05, getAudioDomain(), 0xAC, 0x01, [mins]);
       await hidDevice.sendReport(0x02, p);
       log(`Установлен таймер сна: ${mins} мин`);
     } catch (err) {
@@ -867,15 +874,16 @@
     try {
       const on = e.target.checked ? 1 : 0;
       const lvl = parseInt(document.getElementById('sidetoneLevel').value) || 5;
+      const domain = getAudioDomain();
 
       // Шаг 1: активация 0x98
-      const p1 = buildReport(0x05, 0x80, 0x98, 0x01, [on]);
+      const p1 = buildReport(0x05, domain, 0x98, 0x01, [on]);
       await hidDevice.sendReport(0x02, p1);
       await new Promise(r => setTimeout(r, 40));
 
       // Шаг 2: установка громкости 0x99
       if (on) {
-        const p2 = buildReport(0x05, 0x80, 0x99, 0x01, [lvl]);
+        const p2 = buildReport(0x05, domain, 0x99, 0x01, [lvl]);
         await hidDevice.sendReport(0x02, p2);
       }
       log(`Sidetone: ${on ? 'ВКЛ (громкость: ' + lvl + ')' : 'ВЫКЛ'}`);
@@ -892,7 +900,7 @@
   document.getElementById('sidetoneLevel').onchange = async (e) => {
     try {
       const lvl = parseInt(e.target.value);
-      const p = buildReport(0x05, 0x80, 0x99, 0x01, [lvl]);
+      const p = buildReport(0x05, getAudioDomain(), 0x99, 0x01, [lvl]);
       await hidDevice.sendReport(0x02, p);
       log(`Громкость Sidetone: ${lvl}`);
     } catch (err) {
@@ -904,18 +912,20 @@
   async function sendHardwareEq(values, logMessage = true) {
     if (!hidDevice || !hidDevice.opened) return;
     try {
+      const domain = getAudioDomain();
+
       // 1) BS_CMD_PREP (0x1E)
-      const p1 = buildReport(0x04, 0x80, 0x1E, 0x00, []);
+      const p1 = buildReport(0x04, domain, 0x1E, 0x00, []);
       await hidDevice.sendReport(0x02, p1);
       await new Promise(r => setTimeout(r, 40));
 
       // 2) BS_CMD_PRESET (0x93) — Слот Custom = 0xFF
-      const p2 = buildReport(0x05, 0x80, 0x93, 0x01, [0xFF]);
+      const p2 = buildReport(0x05, domain, 0x93, 0x01, [0xFF]);
       await hidDevice.sendReport(0x02, p2);
       await new Promise(r => setTimeout(r, 40));
 
       // 3) BS_CMD_ENHANCE (0x9D) — Флаг аудиопроцессора
-      const p3 = buildReport(0x05, 0x80, 0x9D, 0x01, [0x01]);
+      const p3 = buildReport(0x05, domain, 0x9D, 0x01, [0x01]);
       await hidDevice.sendReport(0x02, p3);
       await new Promise(r => setTimeout(r, 40));
 
@@ -923,12 +933,12 @@
       // Аппаратное смещение чипа MediaTek: при записи значение сдвигается на -5.
       // Чтобы получить целевой dB в регистре гарнитуры, на шину отправляем (dB + 5).
       const wireValues = values.map(v => Math.max(-12, Math.min(12, v)) + 5);
-      const p4 = buildReport(0x0E, 0x80, 0x95, 0x0A, wireValues);
+      const p4 = buildReport(0x0E, domain, 0x95, 0x0A, wireValues);
       await hidDevice.sendReport(0x02, p4);
       await new Promise(r => setTimeout(r, 50));
 
       // 5) Повторный селектор пресета (0x93) для гарантированного защелкивания (DSP Latch) в аудиотракт
-      const p5 = buildReport(0x05, 0x80, 0x93, 0x01, [0xFF]);
+      const p5 = buildReport(0x05, domain, 0x93, 0x01, [0xFF]);
       await hidDevice.sendReport(0x02, p5);
 
       if (logMessage) {
