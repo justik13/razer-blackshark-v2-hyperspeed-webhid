@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Razer BlackShark V2 HS Web Controller</title>
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --card: #15181f;
+      --card-border: #232732;
+      --razer: #00ff00;
+      --razer-dim: #00cc00;
+      --razer-glow: rgba(0, 255, 0, 0.15);
+      --text: #f0f3f6;
+      --text-muted: #8b949e;
+      --danger: #ff4d4f;
+      --warning: #faad14;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 660px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      background: var(--razer-glow);
+      color: var(--razer);
+      border: 1px solid rgba(0, 255, 0, 0.3);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    h1 {
+      font-size: 19px;
+      font-weight: 600;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .btn {
+      background: var(--razer);
+      color: #000;
+      border: none;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:hover {
+      background: #33ff33;
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      background: #1e2229;
+      color: #485260;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: #1e2229;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover {
+      background: #282e38;
+    }
+
+    /* Battery Card */
+    .battery-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0f1115;
+      border: 1px solid var(--card-border);
+      padding: 16px 20px;
+      border-radius: 10px;
+    }
+
+    .battery-info {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .battery-val {
+      font-size: 46px;
+      font-weight: 800;
+      color: var(--razer);
+      line-height: 1;
+    }
+
+    .battery-status {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .battery-visual {
+      width: 76px;
+      height: 38px;
+      border: 3px solid #323842;
+      border-radius: 6px;
+      padding: 3px;
+      position: relative;
+    }
+
+    .battery-visual::after {
+      content: '';
+      position: absolute;
+      right: -8px;
+      top: 10px;
+      width: 5px;
+      height: 12px;
+      background: #323842;
+      border-radius: 0 3px 3px 0;
+    }
+
+    .battery-fill {
+      height: 100%;
+      background: var(--razer);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.4s ease, background-color 0.3s;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #2b313a;
+      transition: .3s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--razer);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+      background-color: #000;
+    }
+
+    .range-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--razer);
+    }
+
+    select {
+      background: #1e2229;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+      padding: 8px 12px;
+      border-radius: 6px;
+      outline: none;
+      font-size: 13px;
+    }
+
+    .eq-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 6px;
+      padding-top: 10px;
+    }
+
+    .eq-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .eq-col input[type="range"] {
+      writing-mode: vertical-lr;
+      direction: rtl;
+      height: 110px;
+      width: 18px;
+    }
+
+    .eq-label {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .eq-val {
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .presets-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      background: #1e2229;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--razer);
+    }
+
+    .preset-btn.active {
+      border-color: var(--razer);
+      background: var(--razer-glow);
+      color: var(--razer);
+    }
+
+    #log {
+      font-family: Consolas, Monaco, monospace;
+      font-size: 11px;
+      color: #8b949e;
+      background: #090b0d;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 10px;
+      height: 90px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo-group">
+      <span class="logo-badge">WebHID</span>
+      <h1>Razer BlackShark V2 HS</h1>
+    </div>
+    <div id="connectionStatus" style="font-size: 13px; color: var(--danger);">● Не подключено</div>
+  </header>
+
+  <!-- Connect Card -->
+  <div class="card">
+    <div style="display: flex; gap: 12px;">
+      <button id="connectBtn" class="btn">⚡ Подключить гарнитуру</button>
+      <button id="refreshBtn" class="btn btn-secondary" disabled>🔄 Обновить статус</button>
+    </div>
+    <div style="font-size: 12px; color: var(--text-muted);">
+      * Работает в Chrome / Edge. Подключение через 2.4G USB-донгл или провод Type-C. <strong>Razer Synapse должен быть закрыт</strong>.
+    </div>
+  </div>
+
+  <!-- Battery Card -->
+  <div class="card">
+    <div class="card-title">Батарея и питание</div>
+    <div class="battery-box">
+      <div class="battery-info">
+        <span class="battery-val" id="batteryNum">--%</span>
+        <span class="battery-status" id="chargingStatus">Ожидание подключения...</span>
+      </div>
+      <div class="battery-visual">
+        <div class="battery-fill" id="batteryFill"></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <span>Автоотключение при простое</span>
+      <select id="sleepSelect" disabled>
+        <option value="0">Выключено</option>
+        <option value="15">15 минут</option>
+        <option value="30">30 минут</option>
+        <option value="45">45 минут</option>
+        <option value="60">60 минут</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <span>Индикатор LED на донгле</span>
+      <select id="ledSelect" disabled>
+        <option value="1">Статус подключения (Белый)</option>
+        <option value="2">Статус батареи (Зел / Желт / Красн)</option>
+        <option value="3">Предупреждение о разряде (Мигающий)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Sidetone -->
+  <div class="card">
+    <div class="card-title">Самопрослушивание микрофона (Sidetone)</div>
+    <div class="row">
+      <span>Включить Sidetone</span>
+      <label class="switch">
+        <input type="checkbox" id="sidetoneToggle" disabled>
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="range-group">
+      <div style="display:flex; justify-content:space-between; font-size:13px;">
+        <span>Громкость Sidetone:</span>
+        <span id="sidetoneVal">10</span>
+      </div>
+      <input type="range" id="sidetoneLevel" min="0" max="10" value="10" disabled>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; margin-top:4px; padding-top:10px; border-top:1px solid var(--card-border);">
+      <button id="testMicBtn" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;">🎤 Активировать микрофон</button>
+      <div style="flex:1; height:8px; background:#0f1115; border-radius:4px; overflow:hidden; border:1px solid var(--card-border);">
+        <div id="micMeter" style="width:0%; height:100%; background:var(--razer); transition:width 0.05s;"></div>
+      </div>
+    </div>
+    <div style="font-size:11px; color:var(--text-muted);">
+      * Если Sidetone не слышен: убедитесь, что штанга микрофона плотно вставлена, круглая кнопка Mute на левой чашке отжата, или нажмите «Активировать микрофон».
+    </div>
+  </div>
+
+  <!-- Hardware EQ -->
+  <div class="card">
+    <div class="card-title">
+      <span>Аппаратный 10-полосный эквалайзер</span>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; text-transform: none; color: var(--text-muted); cursor: pointer;">
+          <input type="checkbox" id="livePreviewToggle" checked>
+          <span>Предпросмотр на лету</span>
+        </label>
+        <button id="revertEqBtn" class="btn btn-secondary" style="padding:5px 10px; font-size:11px;" disabled>↩ Отменить</button>
+        <button id="applyEqBtn" class="btn" style="padding:5px 12px; font-size:12px;" disabled>💾 Зафиксировать</button>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <div class="presets-row">
+        <button class="preset-btn" id="pre_flat" onclick="loadPreset([0,0,0,0,0,0,0,0,0,0], this)">Flat (0 dB)</button>
+        <button class="preset-btn" id="pre_bass" onclick="loadPreset([1,1,0,0,0,0,0,0,0,0], this)">Bass+ (+1 dB)</button>
+        <button class="preset-btn" id="pre_music" onclick="loadPreset([3,3,2,0,1,1,1,1,1,-3], this)">Music</button>
+        <button class="preset-btn" id="pre_game" onclick="loadPreset([-7,-5,-3,-3,3,4,-2,-3,-3,-3], this)">Game (Шаги)</button>
+        <button class="preset-btn" id="pre_autoeq" onclick="loadPreset([6,6,-4,2,4,0,-4,2,-3,10], this)">AutoEQ (Rtings)</button>
+        <button id="resetFlatBtn" class="btn btn-secondary" style="padding:4px 10px; font-size:11px; border-color:rgba(0,255,0,0.4); color:var(--razer);" onclick="resetToFactoryFlat()">⚡ Сбросить в 0 dB</button>
+      </div>
+      <button id="testAudioBtn" class="btn btn-secondary" style="padding:5px 12px; font-size:11px;">▶ Тестовый звук</button>
+    </div>
+
+    <div class="eq-grid" id="eqGrid"></div>
+
+    <div style="font-size:11px; color:var(--text-muted); line-height:1.4; margin-top:4px; padding-top:8px; border-top:1px solid var(--card-border);">
+      💡 <b>Совет по звуку</b>: процессор гарнитуры (DSP) автоматически снижает общую громкость при задире полос выше 0 dB для защиты от перегрузки. Если звук кажется глухим («как из бочки») или тихим — нажмите <b>«Сбросить в 0 dB»</b> или опускайте ненужные частоты в минус вместо подъёма.
+    </div>
+  </div>
+
+  <!-- Diagnostics Log -->
+  <div class="card">
+    <div class="card-title">Лог WebHID</div>
+    <div id="log">Ожидание подключения...</div>
+  </div>
+</div>
+
+<script>
+  const VID = 0x1532; // Razer
+  const PID_24G = 0x0565; // BlackShark V2 HS 2.4G
+  const PID_USB = 0x0566; // BlackShark V2 HS USB
+
+  let hidDevice = null;
+  let counter = 0;
+  let pollTimer = null;
+
+  // Маска 0x60 идентифицирует Synapse Audio Client в микрокоде MediaTek
+  function nextSeq() {
+    return 0x60 | ((counter++) & 0x1F);
+  }
+
+  const frequencies = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+  const eqValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  let savedEqValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  let eqDebounceTimer = null;
+
+  function log(msg) {
+    const logEl = document.getElementById('log');
+    const time = new Date().toLocaleTimeString();
+    logEl.innerHTML += `<div>[${time}] ${msg}</div>`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function triggerEqLivePreview() {
+    const isLive = document.getElementById('livePreviewToggle').checked;
+    if (isLive && hidDevice && hidDevice.opened) {
+      document.getElementById('revertEqBtn').disabled = false;
+      if (eqDebounceTimer) clearTimeout(eqDebounceTimer);
+      eqDebounceTimer = setTimeout(() => {
+        sendHardwareEq(eqValues, false);
+      }, 60);
+    }
+  }
+
+  // Генерация слайдеров эквалайзера
+  const eqGrid = document.getElementById('eqGrid');
+  frequencies.forEach((f, i) => {
+    const col = document.createElement('div');
+    col.className = 'eq-col';
+    col.innerHTML = `
+      <span class="eq-val" id="eqv_${i}">0</span>
+      <input type="range" id="eqr_${i}" min="-12" max="12" value="0" disabled>
+      <span class="eq-label">${f}</span>
+    `;
+    eqGrid.appendChild(col);
+
+    col.querySelector('input').addEventListener('input', (e) => {
+      eqValues[i] = parseInt(e.target.value);
+      document.getElementById(`eqv_${i}`).innerText = (eqValues[i] > 0 ? '+' : '') + eqValues[i];
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      triggerEqLivePreview();
+    });
+  });
+
+  window.loadPreset = function(preset, btnEl) {
+    preset.forEach((val, i) => {
+      eqValues[i] = val;
+      const input = document.getElementById(`eqr_${i}`);
+      if (input) input.value = val;
+      const v = document.getElementById(`eqv_${i}`);
+      if (v) v.innerText = (val > 0 ? '+' : '') + val;
+    });
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+    triggerEqLivePreview();
+  };
+
+  // Автоматическое подключение, если разрешение уже выдано ранее
+  window.addEventListener('DOMContentLoaded', async () => {
+    if (!('hid' in navigator)) {
+      log("Ошибка: Браузер не поддерживает WebHID (откройте страницу в Chrome или Edge)");
+      return;
+    }
+
+    // Слушатели системных событий USB
+    navigator.hid.addEventListener('disconnect', (event) => {
+      if (event.device === hidDevice) {
+        log("Устройство отключено от USB");
+        handleDeviceDisconnect();
+      }
+    });
+
+    navigator.hid.addEventListener('connect', async (event) => {
+      if (event.device.vendorId === VID && (event.device.productId === PID_24G || event.device.productId === PID_USB)) {
+        log("Обнаружено подключение донгла. Инициализация...");
+        await initializeDevice(event.device);
+      }
+    });
+
+    const devices = await navigator.hid.getDevices();
+    const target = devices.find(d => d.vendorId === VID && (d.productId === PID_24G || d.productId === PID_USB));
+    if (target) {
+      log("Найдено сопряжённое устройство. Подключение...");
+      await initializeDevice(target);
+    }
+  });
+
+  document.getElementById('connectBtn').onclick = async () => {
+    try {
+      // Строгий фильтр: показываем только BlackShark V2 HS, исключая мыши и клавиатуры
+      const devices = await navigator.hid.requestDevice({
+        filters: [
+          { vendorId: VID, productId: PID_24G },
+          { vendorId: VID, productId: PID_USB }
+        ]
+      });
+
+      if (!devices || devices.length === 0) {
+        log("Устройство не выбрано в окне браузера");
+        return;
+      }
+
+      await initializeDevice(devices[0]);
+    } catch (err) {
+      log("Ошибка запроса устройства: " + err.message);
+    }
+  };
+
+  async function initializeDevice(dev) {
+    try {
+      hidDevice = dev;
+      if (!hidDevice.opened) {
+        await hidDevice.open();
+      }
+
+      document.getElementById('connectionStatus').innerText = "● Подключено: " + (hidDevice.productName || "Razer BlackShark V2 HS");
+      document.getElementById('connectionStatus').style.color = "var(--razer)";
+      log(`Успешно открыт интерфейс: ${hidDevice.productName}`);
+
+      enableControls(true);
+
+      hidDevice.addEventListener('inputreport', handleInputReport);
+
+      // Полная синхронизация текущих настроек
+      await syncHeadsetState();
+
+      // Автоматический опрос батареи каждые 30 секунд
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(queryBattery, 30000);
+    } catch (e) {
+      log("Ошибка инициализации: " + e.message);
+    }
+  }
+
+  function handleDeviceDisconnect() {
+    enableControls(false);
+    if (pollTimer) clearInterval(pollTimer);
+    document.getElementById('connectionStatus').innerText = "● Не подключено";
+    document.getElementById('connectionStatus').style.color = "var(--danger)";
+    document.getElementById('batteryNum').innerText = "--%";
+    document.getElementById('chargingStatus').innerText = "Устройство отключено";
+    document.getElementById('batteryFill').style.width = "0%";
+  }
+
+  function enableControls(enabled) {
+    document.getElementById('refreshBtn').disabled = !enabled;
+    document.getElementById('sleepSelect').disabled = !enabled;
+    document.getElementById('ledSelect').disabled = !enabled;
+    document.getElementById('sidetoneToggle').disabled = !enabled;
+    document.getElementById('sidetoneLevel').disabled = !enabled;
+    document.getElementById('applyEqBtn').disabled = !enabled;
+    for (let i = 0; i < 10; i++) {
+      document.getElementById(`eqr_${i}`).disabled = !enabled;
+    }
+  }
+
+  // Универсальный упаковщик репорта WebHID со строгой XOR-контрольной суммой MediaTek
+  function buildReport(length, domain, cmd, count, valBytes) {
+    const p = new Uint8Array(63);
+    p[0] = 0x00;
+    p[1] = nextSeq();
+    p[5] = length;
+    p[7] = 0x00; // OUT
+    p[8] = domain; // 0x00 for LED, 0x80 for audio/system
+    p[9] = cmd;
+    p[10] = 0x00;
+    p[11] = count;
+    if (valBytes && valBytes.length) {
+      for (let i = 0; i < valBytes.length; i++) {
+        p[12 + i] = valBytes[i] & 0xFF;
+      }
+    }
+    // Контрольная сумма XOR: Report ID (0x02) ^ p[0..60]
+    let xor = 0x02;
+    for (let i = 0; i < 61; i++) {
+      xor ^= p[i];
+    }
+    p[61] = xor;
+    p[62] = 0x00;
+    return p;
+  }
+
+  // Обработка входящих репортов гарнитуры
+  function handleInputReport(event) {
+    const d = new Uint8Array(event.data.buffer);
+    if (d.length < 13) return;
+
+    // В ответе: d[8]=0x80, d[9]=CMD, d[10]=0x01, d[11]=0x01, d[12]=VALUE
+    const cmd = d[9];
+    const val = d[12];
+
+    // 0x21: Батарея
+    if (cmd === 0x21) {
+      if (val >= 0 && val <= 100) {
+        updateBatteryUI(val);
+        log(`Батарея: ${val}%`);
+      }
+    }
+    // 0x2A: Статус кабеля / зарядки
+    else if (cmd === 0x2A) {
+      const isCharging = (val > 0);
+      document.getElementById('chargingStatus').innerText = isCharging ? "⚡ Идёт зарядка" : "🔋 От аккумулятора";
+      if (isCharging) {
+        document.getElementById('batteryFill').style.backgroundColor = "var(--razer)";
+      }
+    }
+    // 0x2C: Таймер сна
+    else if (cmd === 0x2C) {
+      document.getElementById('sleepSelect').value = val;
+      log(`Таймер сна гарнитуры: ${val} мин`);
+    }
+    // 0x18: Sidetone On/Off
+    else if (cmd === 0x18) {
+      document.getElementById('sidetoneToggle').checked = (val > 0);
+      log(`Sidetone гарнитуры: ${val > 0 ? 'ВКЛ' : 'ВЫКЛ'}`);
+    }
+    // 0x19: Sidetone громкость
+    else if (cmd === 0x19) {
+      document.getElementById('sidetoneLevel').value = val;
+      document.getElementById('sidetoneVal').innerText = val;
+      log(`Громкость Sidetone гарнитуры: ${val}`);
+    }
+    // 0x66: Режим LED донгла
+    else if (cmd === 0x66) {
+      document.getElementById('ledSelect').value = val;
+      log(`Режим LED донгла: ${val}`);
+    }
+    // 0x13: Активный пресет EQ
+    else if (cmd === 0x13) {
+      const presetNames = {
+        0x07: "Game (Игры)",
+        0x08: "Music (Музыка)",
+        0x09: "Movie (Фильмы)",
+        0xff: "Custom (Пользовательский)"
+      };
+      const name = presetNames[val] || `0x${val.toString(16)}`;
+      log(`Активный аппаратный пресет гарнитуры: ${name}`);
+    }
+    // 0x15: Полосы эквалайзера (10 байт)
+    else if (cmd === 0x15 && d.length >= 22) {
+      for (let i = 0; i < 10; i++) {
+        let db = d[12 + i];
+        if (db > 127) db -= 256;
+        // Значение в регистре чипа MediaTek и есть реальный dB эквалайзера
+        if (db < -12) db = -12;
+        if (db > 12) db = 12;
+        eqValues[i] = db;
+        savedEqValues[i] = db;
+        const input = document.getElementById(`eqr_${i}`);
+        if (input) input.value = db;
+        const v = document.getElementById(`eqv_${i}`);
+        if (v) v.innerText = (db > 0 ? '+' : '') + db;
+      }
+      document.getElementById('revertEqBtn').disabled = true;
+      log("Эквалайзер синхронизирован с гарнитурой: [" + eqValues.join(', ') + "] dB");
+    }
+  }
+
+  function updateBatteryUI(percent) {
+    document.getElementById('batteryNum').innerText = `${percent}%`;
+    const fill = document.getElementById('batteryFill');
+    fill.style.width = `${percent}%`;
+    if (percent <= 15) {
+      fill.style.backgroundColor = "var(--danger)";
+    } else if (percent <= 35) {
+      fill.style.backgroundColor = "var(--warning)";
+    } else {
+      fill.style.backgroundColor = "var(--razer)";
+    }
+  }
+
+  // Одиночный запрос с таймаутом
+  async function sendQuery(cmdByte, domain = 0x80) {
+    if (!hidDevice || !hidDevice.opened) return;
+    try {
+      const p = buildReport(0x04, domain, cmdByte, 0x00, []);
+      await hidDevice.sendReport(0x02, p);
+    } catch (e) {
+      log(`Ошибка отправки query 0x${cmdByte.toString(16)}: ${e.message}`);
+    }
+  }
+
+  async function queryBattery() {
+    await sendQuery(0x21); // Battery
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x2A); // Charging
+  }
+
+  async function syncHeadsetState() {
+    log("Синхронизация состояния гарнитуры...");
+    await sendQuery(0x21); // Battery
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x2A); // Charging
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x2C); // Sleep timer
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x18); // Sidetone state
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x19); // Sidetone level
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x66, 0x00); // LED mode
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x13); // Active preset
+    await new Promise(r => setTimeout(r, 60));
+    await sendQuery(0x15); // Hardware EQ bands
+  }
+
+  document.getElementById('refreshBtn').onclick = () => {
+    syncHeadsetState();
+  };
+
+  // 1. Таймер сна (CMD 0xAC)
+  document.getElementById('sleepSelect').onchange = async (e) => {
+    try {
+      const mins = parseInt(e.target.value);
+      const p = buildReport(0x05, 0x80, 0xAC, 0x01, [mins]);
+      await hidDevice.sendReport(0x02, p);
+      log(`Установлен таймер сна: ${mins} мин`);
+    } catch (err) {
+      log(`Ошибка установки таймера: ${err.message}`);
+    }
+  };
+
+  // 2. Режим LED донгла (CMD 0xE6, domain 0x00)
+  document.getElementById('ledSelect').onchange = async (e) => {
+    try {
+      const mode = parseInt(e.target.value);
+      const p = buildReport(0x05, 0x00, 0xE6, 0x01, [mode]);
+      await hidDevice.sendReport(0x02, p);
+      log(`Установлен режим LED донгла: ${mode}`);
+    } catch (err) {
+      log(`Ошибка установки LED: ${err.message}`);
+    }
+  };
+
+  // 3. Sidetone On/Off (CMD 0x98 + CMD 0x99)
+  document.getElementById('sidetoneToggle').onchange = async (e) => {
+    try {
+      const on = e.target.checked ? 1 : 0;
+      const lvl = parseInt(document.getElementById('sidetoneLevel').value) || 5;
+
+      // Шаг 1: активация 0x98
+      const p1 = buildReport(0x05, 0x80, 0x98, 0x01, [on]);
+      await hidDevice.sendReport(0x02, p1);
+      await new Promise(r => setTimeout(r, 40));
+
+      // Шаг 2: установка громкости 0x99
+      if (on) {
+        const p2 = buildReport(0x05, 0x80, 0x99, 0x01, [lvl]);
+        await hidDevice.sendReport(0x02, p2);
+      }
+      log(`Sidetone: ${on ? 'ВКЛ (громкость: ' + lvl + ')' : 'ВЫКЛ'}`);
+    } catch (err) {
+      log(`Ошибка Sidetone: ${err.message}`);
+    }
+  };
+
+  // 4. Sidetone Level (CMD 0x99)
+  document.getElementById('sidetoneLevel').oninput = (e) => {
+    document.getElementById('sidetoneVal').innerText = e.target.value;
+  };
+
+  document.getElementById('sidetoneLevel').onchange = async (e) => {
+    try {
+      const lvl = parseInt(e.target.value);
+      const p = buildReport(0x05, 0x80, 0x99, 0x01, [lvl]);
+      await hidDevice.sendReport(0x02, p);
+      log(`Громкость Sidetone: ${lvl}`);
+    } catch (err) {
+      log(`Ошибка уровня Sidetone: ${err.message}`);
+    }
+  };
+
+  // 5. Запись 10-полосного эквалайзера в память гарнитуры с мгновенной фиксацией в DSP
+  async function sendHardwareEq(values, logMessage = true) {
+    if (!hidDevice || !hidDevice.opened) return;
+    try {
+      // 1) BS_CMD_PREP (0x1E)
+      const p1 = buildReport(0x04, 0x80, 0x1E, 0x00, []);
+      await hidDevice.sendReport(0x02, p1);
+      await new Promise(r => setTimeout(r, 40));
+
+      // 2) BS_CMD_PRESET (0x93) — Слот Custom = 0xFF
+      const p2 = buildReport(0x05, 0x80, 0x93, 0x01, [0xFF]);
+      await hidDevice.sendReport(0x02, p2);
+      await new Promise(r => setTimeout(r, 40));
+
+      // 3) BS_CMD_ENHANCE (0x9D) — Флаг аудиопроцессора
+      const p3 = buildReport(0x05, 0x80, 0x9D, 0x01, [0x01]);
+      await hidDevice.sendReport(0x02, p3);
+      await new Promise(r => setTimeout(r, 40));
+
+      // 4) BS_CMD_EQ (0x95) — 10 полос
+      // Аппаратное смещение чипа MediaTek: при записи значение сдвигается на -5.
+      // Чтобы получить целевой dB в регистре гарнитуры, на шину отправляем (dB + 5).
+      const wireValues = values.map(v => Math.max(-12, Math.min(12, v)) + 5);
+      const p4 = buildReport(0x0E, 0x80, 0x95, 0x0A, wireValues);
+      await hidDevice.sendReport(0x02, p4);
+      await new Promise(r => setTimeout(r, 50));
+
+      // 5) Повторный селектор пресета (0x93) для гарантированного защелкивания (DSP Latch) в аудиотракт
+      const p5 = buildReport(0x05, 0x80, 0x93, 0x01, [0xFF]);
+      await hidDevice.sendReport(0x02, p5);
+
+      if (logMessage) {
+        log("Эквалайзер применён: [" + values.join(', ') + "] dB");
+      }
+    } catch (err) {
+      log("Ошибка записи EQ: " + err.message);
+    }
+  }
+
+  // Мгновенный сброс в заводской Flat (0 dB)
+  window.resetToFactoryFlat = async function() {
+    loadPreset([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], document.getElementById('pre_flat'));
+    const btn = document.getElementById('resetFlatBtn');
+    if (btn) {
+      btn.innerText = "⏳ Сброс...";
+      btn.disabled = true;
+    }
+    await sendHardwareEq([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], true);
+    savedEqValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    document.getElementById('revertEqBtn').disabled = true;
+    if (btn) {
+      btn.innerText = "✓ 0 dB (Flat)";
+      btn.style.background = "var(--razer)";
+      btn.style.color = "#000";
+      setTimeout(() => {
+        btn.innerText = "⚡ Сбросить в 0 dB";
+        btn.style.background = "";
+        btn.style.color = "var(--razer)";
+        btn.disabled = false;
+      }, 2000);
+    }
+    log("Гарнитура сброшена в чистый заводской Flat (0 dB)! Полная громкость восстановлена.");
+  };
+
+  // Кнопка «Зафиксировать в гарнитуре»
+  document.getElementById('applyEqBtn').onclick = async () => {
+    const btn = document.getElementById('applyEqBtn');
+    await sendHardwareEq(eqValues, true);
+    savedEqValues = [...eqValues];
+    document.getElementById('revertEqBtn').disabled = true;
+
+    // Наглядная визуальная индикация успешной фиксации
+    const origText = btn.innerText;
+    btn.innerText = "✓ Зафиксировано!";
+    btn.style.background = "#33ff33";
+    btn.style.transform = "scale(1.04)";
+    setTimeout(() => {
+      btn.innerText = origText;
+      btn.style.background = "";
+      btn.style.transform = "";
+    }, 2000);
+
+    log("Текущий профиль эквалайзера зафиксирован в памяти гарнитуры!");
+  };
+
+  // Кнопка «Отменить изменения» (Revert)
+  document.getElementById('revertEqBtn').onclick = async () => {
+    for (let i = 0; i < 10; i++) {
+      eqValues[i] = savedEqValues[i];
+      const input = document.getElementById(`eqr_${i}`);
+      if (input) input.value = savedEqValues[i];
+      const v = document.getElementById(`eqv_${i}`);
+      if (v) v.innerText = (savedEqValues[i] > 0 ? '+' : '') + savedEqValues[i];
+    }
+    await sendHardwareEq(savedEqValues, true);
+    document.getElementById('revertEqBtn').disabled = true;
+    log("Изменения отменены. Возвращён исходный профиль: [" + savedEqValues.join(', ') + "] dB");
+  };
+
+  // 6. Встроенный аудиотест для предпросмотра эквалайзера (Web Audio API)
+  let audioCtx = null;
+  let audioTestNodes = [];
+  let isPlayingTest = false;
+
+  document.getElementById('testAudioBtn').onclick = () => {
+    const btn = document.getElementById('testAudioBtn');
+    if (isPlayingTest) {
+      stopAudioTest();
+      btn.innerText = "▶ Тестовый звук";
+      btn.classList.remove('btn');
+      btn.classList.add('btn-secondary');
+    } else {
+      startAudioTest();
+      btn.innerText = "⏹ Остановить звук";
+      btn.classList.remove('btn-secondary');
+      btn.classList.add('btn');
+    }
+  };
+
+  function startAudioTest() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.12;
+      masterGain.connect(audioCtx.destination);
+
+      // Синтезируем богатый частотный микс для теста баса и средних
+      const freqs = [55, 110, 220, 440, 880, 1760];
+      freqs.forEach((f, idx) => {
+        const osc = audioCtx.createOscillator();
+        osc.type = idx < 2 ? 'sine' : (idx < 4 ? 'triangle' : 'sawtooth');
+        osc.frequency.value = f;
+        const g = audioCtx.createGain();
+        g.gain.value = idx === 0 ? 0.9 : (idx === 1 ? 0.6 : 0.25);
+        osc.connect(g);
+        g.connect(masterGain);
+        osc.start();
+        audioTestNodes.push(osc);
+      });
+
+      // Тест верхних частот (высокочастотный шум тарелок)
+      const bufferSize = audioCtx.sampleRate * 2;
+      const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      noise.loop = true;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 4000;
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.value = 0.04;
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(masterGain);
+      noise.start();
+      audioTestNodes.push(noise);
+
+      isPlayingTest = true;
+      log("Запущен тестовый звук (бас 55-110Гц + средние + ВЧ шум)");
+    } catch (e) {
+      log("Ошибка запуска аудио-теста: " + e.message);
+    }
+  }
+
+  function stopAudioTest() {
+    audioTestNodes.forEach(n => {
+      try { n.stop(); n.disconnect(); } catch(e) {}
+    });
+    audioTestNodes = [];
+    isPlayingTest = false;
+    log("Тестовый звук остановлен");
+  }
+
+  // 7. Активация и тест микрофона (для гарантированного пробуждения Sidetone в Windows)
+  let micStream = null;
+  let micMeterAnim = null;
+
+  document.getElementById('testMicBtn').onclick = async () => {
+    const btn = document.getElementById('testMicBtn');
+    if (micStream) {
+      micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
+      if (micMeterAnim) cancelAnimationFrame(micMeterAnim);
+      document.getElementById('micMeter').style.width = '0%';
+      btn.innerText = "🎤 Активировать микрофон";
+      btn.classList.remove('btn');
+      btn.classList.add('btn-secondary');
+      log("Захват микрофона остановлен");
+    } else {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        btn.innerText = "⏹ Остановить микрофон";
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn');
+        log("Микрофон активирован в Windows. Аппаратный Sidetone активен!");
+
+        const mCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = mCtx.createMediaStreamSource(micStream);
+        const analyser = mCtx.createAnalyser();
+        analyser.fftSize = 64;
+        src.connect(analyser);
+
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        function updateMeter() {
+          analyser.getByteFrequencyData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) sum += data[i];
+          let avg = sum / data.length;
+          let pct = Math.min(100, Math.round((avg / 128) * 100));
+          document.getElementById('micMeter').style.width = pct + '%';
+          micMeterAnim = requestAnimationFrame(updateMeter);
+        }
+        updateMeter();
+      } catch (err) {
+        log("Ошибка доступа к микрофону: " + err.message);
+      }
+    }
+  };
+</script>
+</body>
+</html>
