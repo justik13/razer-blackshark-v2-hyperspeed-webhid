@@ -96,6 +96,10 @@ payload[61] = checksum;
 | `0x99` | `0x80` / `0x00` | SET | `0x05` | `1` | Set sidetone volume level (`0..15`) |
 | `0x13` | `0x80` | GET | `0x04` | `0` | Active EQ preset query |
 | `0x93` | `0x80` | SET | `0x05` | `1` | Set EQ preset (`0x07` Game, `0x08` Music, `0x09` Movie, `0xFF` Custom) |
+| `0x1E` | `0x80` | GET | `0x04` | `0` | Master EQ enable query |
+| `0x9E` | `0x80` | SET | `0x05` | `1` | Master EQ enable (`0` = Bypass, `1` = Active DSP processing) |
+| `0x1D` | `0x80` | GET | `0x04` | `0` | Audio Enhancement status query |
+| `0x9D` | `0x80` | SET | `0x05` | `1` | Audio Enhancement (`0` = Pure Hi-Fi / Off, `1` = Boomy spatial bass expander) |
 | `0x15` | `0x80` | GET | `0x04` | `0` | Read 10-band EQ curve from active preset |
 | `0x95` | `0x80` | SET | `0x0E` | `10` | Write 10-band EQ curve |
 
@@ -113,14 +117,14 @@ Synapse restricted the sleep timer dropdown to 15, 30, 45, or 60 minutes. The un
 The MediaTek DSP subtracts 5 from each band written via `0x95` before committing it to internal memory: `gain_stored = wire_val - 5`. Writing literal zeros for a flat curve stores -5 dB across all bands, cutting overall output and damping low-end punch.
 Pre-biasing outgoing values (`wire_value = target_dB + 5`) keeps the DSP register at true 0 dB. Querying `0x15` reads back the target value directly.
 
-#### Preset Latching Order
+#### Preset Latching Order & DSP Pipeline
 When setting custom EQ, `0x93` (preset selector) latches the slot's current content into the live audio path before `0x95` writes new values. Writing only once leaves the audio path playing the previous curve.
-Applying the full Synapse sequence resolves this:
-1. `0x1E` (Prep)
-2. `0x93` (`0xFF` Custom slot)
-3. `0x9D` (`0x01` Enhance flag)
-4. `0x95` (10 band values)
-5. Pause 40 ms, then re-send `0x93` (`0xFF`) to latch the newly committed curve immediately.
+Furthermore, the HyperSpeed microcontroller requires an explicit Master EQ Enable (`0x9E`), and `0x9D` (Audio Enhancement) must be disabled (`0x00`) to prevent artificial boomy/barrel distortion:
+1. `0x9E` with payload `[0x01]` (Master EQ Enable — without this, custom curves are stored but ignored by DSP).
+2. `0x9D` with payload `[0x00]` (Audio Enhancement OFF — ensures pure uncompressed sound without boomy box effect).
+3. `0x93` (`0xFF` Custom slot).
+4. `0x95` (10 band values with +5 offset).
+5. Pause 40 ms, then re-send `0x93` (`0xFF`) to latch the newly committed curve into the live DSP stream immediately.
 
 ---
 

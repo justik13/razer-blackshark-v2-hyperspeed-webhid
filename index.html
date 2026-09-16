@@ -610,8 +610,8 @@
       id: 0xFF,
       name: "Bass Boost",
       isRom: false,
-      // Чистый глубокий суб-бас с компенсацией верхов и срезом мутных 250-500 Гц
-      curve: [4, 3, 1, -2, -1, 0, 1, 2, 3, 2]
+      // Чистый глубокий суб-бас на базе чистого профиля Music
+      curve: [4, 2, 1, 0, 0, 0, 1, 2, 3, 2]
     },
     custom: {
       id: 0xFF,
@@ -658,6 +658,11 @@
         // Переключаем в ROM слот чипа
         const report = buildReport(0x05, domain, 0x93, 0x01, [p.id]);
         await hidDevice.sendReport(0x02, report);
+        // Активация Master EQ (0x9E = 0x01) и отключение искусственного расширения (0x9D = 0x00)
+        const pEn = buildReport(0x05, domain, 0x9E, 0x01, [0x01]);
+        await hidDevice.sendReport(0x02, pEn);
+        const pEnh = buildReport(0x05, domain, 0x9D, 0x01, [0x00]);
+        await hidDevice.sendReport(0x02, pEnh);
         log(`Активирован заводской ROM-пресет: ${p.name}`);
         document.getElementById('revertEqBtn').disabled = true;
         await new Promise(r => setTimeout(r, 60));
@@ -1197,20 +1202,20 @@
     try {
       const domain = getAudioDomain();
 
-      // 1) BS_CMD_PREP (0x1E)
-      const p1 = buildReport(0x04, domain, 0x1E, 0x00, []);
+      // 1) Master EQ Enable (0x9E = 0x01) — активация DSP эквалайзера
+      const p1 = buildReport(0x05, domain, 0x9E, 0x01, [0x01]);
       await hidDevice.sendReport(0x02, p1);
-      await new Promise(r => setTimeout(r, 40));
+      await new Promise(r => setTimeout(r, 30));
 
-      // 2) BS_CMD_PRESET (0x93) — Слот Custom = 0xFF
-      const p2 = buildReport(0x05, domain, 0x93, 0x01, [0xFF]);
+      // 2) Audio Enhancement (0x9D = 0x00) — отключаем искусственное расширение (устраняет эффект бочки!)
+      const p2 = buildReport(0x05, domain, 0x9D, 0x01, [0x00]);
       await hidDevice.sendReport(0x02, p2);
-      await new Promise(r => setTimeout(r, 40));
+      await new Promise(r => setTimeout(r, 30));
 
-      // 3) BS_CMD_ENHANCE (0x9D) — Флаг аудиопроцессора
-      const p3 = buildReport(0x05, domain, 0x9D, 0x01, [0x01]);
+      // 3) BS_CMD_PRESET (0x93) — Слот Custom = 0xFF
+      const p3 = buildReport(0x05, domain, 0x93, 0x01, [0xFF]);
       await hidDevice.sendReport(0x02, p3);
-      await new Promise(r => setTimeout(r, 40));
+      await new Promise(r => setTimeout(r, 30));
 
       // 4) BS_CMD_EQ (0x95) — 10 полос
       // Аппаратное смещение чипа MediaTek: при записи значение сдвигается на -5.
