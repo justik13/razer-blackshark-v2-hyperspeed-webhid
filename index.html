@@ -506,26 +506,27 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
       <div class="presets-row">
-        <button class="preset-btn" id="pre_flat" onclick="loadPreset([0,0,0,0,0,0,0,0,0,0], this)">Flat (0 dB)</button>
-        <button class="preset-btn" id="pre_bass" onclick="loadPreset([2,2,1,0,0,0,0,0,0,0], this)">Bass+</button>
-        <button class="preset-btn" id="pre_music" onclick="loadPreset([2,1,0,-2,0,0,1,1,2,1], this)">Music</button>
-        <button class="preset-btn" id="pre_game" onclick="loadPreset([-2,-2,-1,0,0,1,2,2,1,0], this)">Game (Шаги)</button>
-        <button class="preset-btn" id="pre_harman" onclick="loadPreset([1,0,-1,-2,0,0,1,1,2,0], this)">Neutral (Harman)</button>
-        <button id="resetFlatBtn" class="btn btn-secondary" style="padding:4px 10px; font-size:11px; border-color:rgba(0,255,0,0.4); color:var(--razer);" onclick="resetToFactoryFlat()">Сбросить в 0 dB</button>
+        <button class="preset-btn" id="btn_preset_music" onclick="activatePreset('music')">Music (ROM)</button>
+        <button class="preset-btn" id="btn_preset_game" onclick="activatePreset('game')">Game (ROM)</button>
+        <button class="preset-btn" id="btn_preset_movie" onclick="activatePreset('movie')">Movie (ROM)</button>
+        <button class="preset-btn" id="btn_preset_flat" onclick="activatePreset('flat')">Flat (0 dB)</button>
+        <button class="preset-btn" id="btn_preset_bass" onclick="activatePreset('bass')">Bass Boost</button>
+        <button class="preset-btn" id="btn_preset_custom" onclick="activatePreset('custom')">Custom</button>
       </div>
-      <div style="display: flex; gap: 6px; align-items: center;">
-        <span style="font-size: 11px; color: var(--text-muted);">ROM:</span>
-        <button class="preset-btn" id="pre_rom_music" onclick="selectRomPreset(0x08, this)">Music</button>
-        <button class="preset-btn" id="pre_rom_game" onclick="selectRomPreset(0x07, this)">Game</button>
-        <button class="preset-btn" id="pre_rom_movie" onclick="selectRomPreset(0x09, this)">Movie</button>
-        <button id="testAudioBtn" class="btn btn-secondary" style="padding:5px 12px; font-size:11px; margin-left:4px;">Тестовый звук</button>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button id="testAudioBtn" class="btn btn-secondary" style="padding:5px 12px; font-size:11px;">▶ Тестовый звук</button>
       </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 2px 0;">
+      <span style="color: var(--text-muted);">Активный пресет: <strong style="color: var(--razer);" id="activePresetName">Ожидание...</strong></span>
+      <span style="color: var(--text-muted); font-family: Consolas, Monaco, monospace;">Регистр DSP (0x15): <span id="dspRawValues" style="color: var(--razer);">[--]</span></span>
     </div>
 
     <div class="eq-grid" id="eqGrid"></div>
 
     <div style="font-size:11px; color:var(--text-muted); line-height:1.4; margin-top:4px; padding-top:8px; border-top:1px solid var(--card-border);">
-      Совет по звуку: процессор гарнитуры (DSP) автоматически снижает общую громкость при задире полос выше 0 dB для защиты от перегрузки. Если звук кажется глухим («как из бочки») или тихим — нажмите «Сбросить в 0 dB» или опускайте ненужные частоты в минус вместо подъёма.
+      Совет по звуку: пресет <strong>Music (ROM)</strong> использует фирменную кривую Razer с чистым верхом и глубоким басом. Пресет <strong>Flat (0 dB)</strong> гарантирует чистое линейное звучание без завала в -5 dB.
     </div>
   </div>
 
@@ -580,6 +581,98 @@
     }
   }
 
+  const FACTORY_PRESETS = {
+    music: {
+      id: 0x08,
+      name: "Music (ROM)",
+      isRom: true,
+      curve: [3, 2, 1, 0, 0, 0, 1, 2, 3, 2]
+    },
+    game: {
+      id: 0x07,
+      name: "Game (ROM)",
+      isRom: true,
+      curve: [-8, -6, -4, -4, 3, 4, -3, -4, -4, -4]
+    },
+    movie: {
+      id: 0x09,
+      name: "Movie (ROM)",
+      isRom: true,
+      curve: [4, 2, 0, -1, 0, 2, 3, 2, 1, 0]
+    },
+    flat: {
+      id: 0xFF,
+      name: "Flat (0 dB)",
+      isRom: false,
+      curve: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    bass: {
+      id: 0xFF,
+      name: "Bass Boost",
+      isRom: false,
+      // Чистый глубокий суб-бас с компенсацией верхов и срезом мутных 250-500 Гц
+      curve: [4, 3, 1, -2, -1, 0, 1, 2, 3, 2]
+    },
+    custom: {
+      id: 0xFF,
+      name: "Custom (Flash)",
+      isRom: false,
+      curve: null
+    }
+  };
+
+  function applyCurveToSliders(curve) {
+    if (!curve) return;
+    curve.forEach((val, i) => {
+      eqValues[i] = val;
+      const input = document.getElementById(`eqr_${i}`);
+      if (input) input.value = val;
+      const v = document.getElementById(`eqv_${i}`);
+      if (v) v.innerText = (val > 0 ? '+' : '') + val;
+    });
+  }
+
+  window.activatePreset = async function(key) {
+    const p = FACTORY_PRESETS[key];
+    if (!p) return;
+
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`btn_preset_${key}`);
+    if (btn) btn.classList.add('active');
+
+    const badge = document.getElementById('activePresetName');
+    if (badge) {
+      badge.innerText = p.name;
+      badge.dataset.presetId = `0x${p.id.toString(16)}`;
+    }
+
+    if (p.curve) {
+      applyCurveToSliders(p.curve);
+    }
+
+    if (!hidDevice || !hidDevice.opened) return;
+
+    try {
+      const domain = getAudioDomain();
+      if (p.isRom) {
+        // Переключаем в ROM слот чипа
+        const report = buildReport(0x05, domain, 0x93, 0x01, [p.id]);
+        await hidDevice.sendReport(0x02, report);
+        log(`Активирован заводской ROM-пресет: ${p.name}`);
+        document.getElementById('revertEqBtn').disabled = true;
+        await new Promise(r => setTimeout(r, 60));
+        await sendQuery(0x13);
+      } else {
+        // Записываем пользовательскую кривую в слот Custom 0xFF
+        await sendHardwareEq(p.curve || eqValues, true);
+        savedEqValues = [...(p.curve || eqValues)];
+        document.getElementById('revertEqBtn').disabled = true;
+      }
+    } catch (err) {
+      log(`Ошибка переключения пресета ${p.name}: ${err.message}`);
+    }
+  };
+
   // Генерация слайдеров эквалайзера
   const eqGrid = document.getElementById('eqGrid');
   frequencies.forEach((f, i) => {
@@ -595,39 +688,35 @@
     col.querySelector('input').addEventListener('input', (e) => {
       eqValues[i] = parseInt(e.target.value);
       document.getElementById(`eqv_${i}`).innerText = (eqValues[i] > 0 ? '+' : '') + eqValues[i];
+
+      // Автоматически переключаем индикатор пресета на Custom
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      const customBtn = document.getElementById('btn_preset_custom');
+      if (customBtn) customBtn.classList.add('active');
+      const badge = document.getElementById('activePresetName');
+      if (badge) {
+        badge.innerText = "Custom (Flash)";
+        badge.dataset.presetId = "0xff";
+      }
+
       triggerEqLivePreview();
     });
   });
 
+  // Совместимость с вызовами из прежней логики
   window.loadPreset = function(preset, btnEl) {
-    preset.forEach((val, i) => {
-      eqValues[i] = val;
-      const input = document.getElementById(`eqr_${i}`);
-      if (input) input.value = val;
-      const v = document.getElementById(`eqv_${i}`);
-      if (v) v.innerText = (val > 0 ? '+' : '') + val;
-    });
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    if (btnEl) btnEl.classList.add('active');
+    applyCurveToSliders(preset);
     triggerEqLivePreview();
   };
 
-  window.selectRomPreset = async function(presetId, btnEl) {
-    if (!hidDevice || !hidDevice.opened) return;
-    try {
-      const domain = getAudioDomain();
-      const p = buildReport(0x05, domain, 0x93, 0x01, [presetId]);
-      await hidDevice.sendReport(0x02, p);
-      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-      if (btnEl) btnEl.classList.add('active');
-      const names = { 0x07: "Game (ROM)", 0x08: "Music (ROM)", 0x09: "Movie (ROM)" };
-      log(`Активирован заводской ROM-пресет: ${names[presetId] || presetId}`);
-      await new Promise(r => setTimeout(r, 60));
-      await sendQuery(0x13);
-    } catch (e) {
-      log(`Ошибка выбора ROM-пресета: ${e.message}`);
-    }
+  window.selectRomPreset = function(pid, btnEl) {
+    if (pid === 0x07) activatePreset('game');
+    else if (pid === 0x08) activatePreset('music');
+    else if (pid === 0x09) activatePreset('movie');
+  };
+
+  window.resetToFactoryFlat = function() {
+    activatePreset('flat');
   };
 
   // Определение целевой коллекции управления MediaTek (Usage Page 0xFF14 / 0xFF00 или Report ID 2)
@@ -902,32 +991,67 @@
     }
     // 0x13: Активный пресет EQ
     else if (cmd === 0x13) {
-      const presetNames = {
-        0x07: "Game (Игры)",
-        0x08: "Music (Музыка)",
-        0x09: "Movie (Фильмы)",
-        0xff: "Custom (Пользовательский)"
-      };
-      const name = presetNames[val] || `0x${val.toString(16)}`;
-      log(`Активный аппаратный пресет гарнитуры: ${name}`);
+      const badge = document.getElementById('activePresetName');
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+
+      if (val === 0x07) {
+        if (badge) { badge.innerText = "Game (ROM)"; badge.dataset.presetId = "0x07"; }
+        const btn = document.getElementById('btn_preset_game');
+        if (btn) btn.classList.add('active');
+        applyCurveToSliders(FACTORY_PRESETS.game.curve);
+        log("Активный аппаратный пресет гарнитуры: Game (ROM)");
+      } else if (val === 0x08) {
+        if (badge) { badge.innerText = "Music (ROM)"; badge.dataset.presetId = "0x08"; }
+        const btn = document.getElementById('btn_preset_music');
+        if (btn) btn.classList.add('active');
+        applyCurveToSliders(FACTORY_PRESETS.music.curve);
+        log("Активный аппаратный пресет гарнитуры: Music (ROM)");
+      } else if (val === 0x09) {
+        if (badge) { badge.innerText = "Movie (ROM)"; badge.dataset.presetId = "0x09"; }
+        const btn = document.getElementById('btn_preset_movie');
+        if (btn) btn.classList.add('active');
+        applyCurveToSliders(FACTORY_PRESETS.movie.curve);
+        log("Активный аппаратный пресет гарнитуры: Movie (ROM)");
+      } else if (val === 0xFF) {
+        if (badge) { badge.innerText = "Custom (Flash)"; badge.dataset.presetId = "0xff"; }
+        const btn = document.getElementById('btn_preset_custom');
+        if (btn) btn.classList.add('active');
+        log("Активный аппаратный пресет гарнитуры: Custom (Flash)");
+      } else {
+        if (badge) { badge.innerText = `Пресет 0x${val.toString(16)}`; badge.dataset.presetId = `0x${val.toString(16)}`; }
+        log(`Активный аппаратный пресет: 0x${val.toString(16)}`);
+      }
     }
     // 0x15: Полосы эквалайзера (10 байт)
     else if (cmd === 0x15 && d.length >= 22) {
+      const rawBands = [];
       for (let i = 0; i < 10; i++) {
         let db = d[12 + i];
         if (db > 127) db -= 256;
-        // Значение в регистре чипа MediaTek и есть реальный dB эквалайзера
         if (db < -12) db = -12;
         if (db > 12) db = 12;
-        eqValues[i] = db;
-        savedEqValues[i] = db;
-        const input = document.getElementById(`eqr_${i}`);
-        if (input) input.value = db;
-        const v = document.getElementById(`eqv_${i}`);
-        if (v) v.innerText = (db > 0 ? '+' : '') + db;
+        rawBands.push(db);
       }
-      document.getElementById('revertEqBtn').disabled = true;
-      log("Эквалайзер синхронизирован с гарнитурой: [" + eqValues.join(', ') + "] dB");
+
+      // Всегда обновляем строку с РЕАЛЬНЫМ аппаратным ответом гарнитуры
+      const dspEl = document.getElementById('dspRawValues');
+      if (dspEl) dspEl.innerText = `[${rawBands.join(', ')}] dB`;
+
+      // Если активен Custom слот (0xFF), выставляем слайдеры строго по физическому ответу чипа
+      const badge = document.getElementById('activePresetName');
+      const curPresetId = badge ? badge.dataset.presetId : null;
+      if (curPresetId === '0xff' || !curPresetId) {
+        for (let i = 0; i < 10; i++) {
+          eqValues[i] = rawBands[i];
+          savedEqValues[i] = rawBands[i];
+          const input = document.getElementById(`eqr_${i}`);
+          if (input) input.value = rawBands[i];
+          const v = document.getElementById(`eqv_${i}`);
+          if (v) v.innerText = (rawBands[i] > 0 ? '+' : '') + rawBands[i];
+        }
+        document.getElementById('revertEqBtn').disabled = true;
+      }
+      log("Реальный ответ регистра 0x15: [" + rawBands.join(', ') + "] dB");
     }
   }
 
@@ -1103,39 +1227,29 @@
       if (logMessage) {
         log("Эквалайзер применён: [" + values.join(', ') + "] dB");
       }
+
+      // 6) Запрос реального регистра 0x15 из чипа гарнитуры
+      await new Promise(r => setTimeout(r, 60));
+      await sendQuery(0x15);
     } catch (err) {
       log("Ошибка записи EQ: " + err.message);
     }
   }
 
-  // Мгновенный сброс в заводской Flat (0 dB)
-  window.resetToFactoryFlat = async function() {
-    loadPreset([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], document.getElementById('pre_flat'));
-    const btn = document.getElementById('resetFlatBtn');
-    if (btn) {
-      btn.innerText = "⏳ Сброс...";
-      btn.disabled = true;
-    }
-    await sendHardwareEq([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], true);
-    savedEqValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    document.getElementById('revertEqBtn').disabled = true;
-    if (btn) {
-      btn.innerText = "✓ 0 dB (Flat)";
-      btn.style.background = "var(--razer)";
-      btn.style.color = "#000";
-      setTimeout(() => {
-        btn.innerText = "⚡ Сбросить в 0 dB";
-        btn.style.background = "";
-        btn.style.color = "var(--razer)";
-        btn.disabled = false;
-      }, 2000);
-    }
-    log("Гарнитура сброшена в чистый заводской Flat (0 dB)! Полная громкость восстановлена.");
-  };
-
   // Кнопка «Зафиксировать в гарнитуре»
   document.getElementById('applyEqBtn').onclick = async () => {
     const btn = document.getElementById('applyEqBtn');
+
+    // Переключаем статус на Custom (Flash)
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    const customBtn = document.getElementById('btn_preset_custom');
+    if (customBtn) customBtn.classList.add('active');
+    const badge = document.getElementById('activePresetName');
+    if (badge) {
+      badge.innerText = "Custom (Flash)";
+      badge.dataset.presetId = "0xff";
+    }
+
     await sendHardwareEq(eqValues, true);
     savedEqValues = [...eqValues];
     document.getElementById('revertEqBtn').disabled = true;
@@ -1156,16 +1270,10 @@
 
   // Кнопка «Отменить изменения» (Revert)
   document.getElementById('revertEqBtn').onclick = async () => {
-    for (let i = 0; i < 10; i++) {
-      eqValues[i] = savedEqValues[i];
-      const input = document.getElementById(`eqr_${i}`);
-      if (input) input.value = savedEqValues[i];
-      const v = document.getElementById(`eqv_${i}`);
-      if (v) v.innerText = (savedEqValues[i] > 0 ? '+' : '') + savedEqValues[i];
-    }
+    applyCurveToSliders(savedEqValues);
     await sendHardwareEq(savedEqValues, true);
     document.getElementById('revertEqBtn').disabled = true;
-    log("Изменения отменены. Возвращён исходный профиль: [" + savedEqValues.join(', ') + "] dB");
+    log("Изменения отменены. Возвращён профиль: [" + savedEqValues.join(', ') + "] dB");
   };
 
   // 6. Встроенный аудиотест для предпросмотра эквалайзера (Web Audio API)
