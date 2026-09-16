@@ -34,7 +34,7 @@ The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project c
   - Writes directly to headset onboard flash memory. Curves persist across reboots, consoles, mobile devices, and separate PCs.
   - **Live Preview mode**: Auditions slider adjustments in real time with 60 ms debouncing.
   - **DSP Latching**: Sends an immediate re-apply sequence to prevent the firmware from staying one write behind.
-  - **Hardware Offset Calibration**: Compensates for the internal MediaTek -5 dB storage offset so output stays at full unity volume.
+  - **Hardware Offset & Dynamic Range Limits**: The MediaTek hardware DSP strictly operates in a **-9 dB to +6 dB** hardware dynamic range (higher/lower values in Synapse are software APO only). Compensates for the internal MediaTek -5 dB storage offset so output stays at full unity volume.
   - **Presets**: Direct hardware access to factory ROM presets (`Music`, `Game`, `Movie`) with authentic Razer curves visualized on sliders, alongside `Flat (0 dB)` (true unity gain without attenuation), refined `Bass Boost` (deep punch with 250–500 Hz scoop to prevent boxy resonance), and `Custom (Flash)`.
   - **Hardware Register Truth**: Live real-time readout of DSP register `0x15` directly confirming the headset's internal silicon gain array.
   - **Audio Test Generator**: Built-in Web Audio tone and noise synthesizer to verify response changes immediately.

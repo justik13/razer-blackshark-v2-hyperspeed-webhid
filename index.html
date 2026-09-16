@@ -688,7 +688,7 @@
     col.className = 'eq-col';
     col.innerHTML = `
       <span class="eq-val" id="eqv_${i}">0</span>
-      <input type="range" id="eqr_${i}" min="-12" max="12" value="0" disabled>
+      <input type="range" id="eqr_${i}" min="-9" max="6" value="0" disabled>
       <span class="eq-label">${f}</span>
     `;
     eqGrid.appendChild(col);
@@ -1036,8 +1036,8 @@
       for (let i = 0; i < 10; i++) {
         let db = d[12 + i];
         if (db > 127) db -= 256;
-        if (db < -12) db = -12;
-        if (db > 12) db = 12;
+        if (db < -9) db = -9;
+        if (db > 6) db = 6;
         rawBands.push(db);
       }
 
@@ -1223,7 +1223,7 @@
       // 4) BS_CMD_EQ (0x95) — 10 полос
       // Аппаратное смещение чипа MediaTek: при записи значение сдвигается на -5.
       // Чтобы получить целевой dB в регистре гарнитуры, на шину отправляем (dB + 5).
-      const wireValues = values.map(v => Math.max(-12, Math.min(12, v)) + 5);
+      const wireValues = values.map(v => Math.max(-9, Math.min(6, v)) + 5);
       const p4 = buildReport(0x0E, domain, 0x95, 0x0A, wireValues);
       await hidDevice.sendReport(0x02, p4);
       await new Promise(r => setTimeout(r, 50));
