@@ -365,6 +365,19 @@
       color: var(--text);
       font-family: Consolas, Monaco, monospace;
     }
+
+    .dev-only {
+      display: none !important;
+    }
+    body.dev-mode-active .dev-only {
+      display: block !important;
+    }
+    body.dev-mode-active span.dev-only {
+      display: inline !important;
+    }
+    body.dev-mode-active div.dev-only-flex {
+      display: flex !important;
+    }
   </style>
 </head>
 <body>
@@ -375,7 +388,13 @@
       <span class="logo-badge">WebHID</span>
       <h1>Razer BlackShark V2 HS</h1>
     </div>
-    <div id="connectionStatus" style="font-size: 13px; color: var(--danger);">● Не подключено</div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); cursor: pointer; user-select: none; background: rgba(255,255,255,0.04); padding: 5px 10px; border-radius: 6px; border: 1px solid var(--card-border);">
+        <input type="checkbox" id="devModeToggle" style="accent-color: var(--razer); cursor: pointer;">
+        <span style="font-weight: 600; letter-spacing: 0.3px;">Dev Режим</span>
+      </label>
+      <div id="connectionStatus" style="font-size: 13px; color: var(--danger);">● Не подключено</div>
+    </div>
   </header>
 
   <!-- Connect Card -->
@@ -534,7 +553,7 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 2px 0;">
       <span style="color: var(--text-muted);">Активный пресет: <strong style="color: var(--razer);" id="activePresetName">Ожидание...</strong></span>
-      <span style="color: var(--text-muted); font-family: Consolas, Monaco, monospace;">Регистр DSP (0x15): <span id="dspRawValues" style="color: var(--razer);">[--]</span></span>
+      <span class="dev-only" style="color: var(--text-muted); font-family: Consolas, Monaco, monospace;">Регистр DSP (0x15): <span id="dspRawValues" style="color: var(--razer);">[--]</span></span>
     </div>
 
     <div class="eq-grid" id="eqGrid"></div>
@@ -544,9 +563,48 @@
     </div>
   </div>
 
+  <!-- Dev Console (Hardware Diagnostics) -->
+  <div class="card dev-only" id="devConsoleCard">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Панель разработчика (Dev Console)</span>
+      <span class="logo-badge" style="font-size: 10px;">Direct Hardware Access</span>
+    </div>
+    
+    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Быстрый опрос регистров чипа MediaTek (GET):</div>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x13)">0x13 Пресет</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x15)">0x15 EQ Flash</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x18)">0x18 Sidetone On</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x19)">0x19 Sidetone Vol</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x27)">0x27 DND</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x2C)">0x2C Sleep</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x21)">0x21 Battery</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x2A)">0x2A Charging</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x55)">0x55 Mic Mute</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x66, 0x00)">0x66 Dongle LED</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x00)">0x00 Serial</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x02)">0x02 Firmware</button>
+      <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="sendQuery(0x03)">0x03 PID</button>
+    </div>
+
+    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Отправка произвольного пакета (SET/CMD):</div>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <input type="text" id="devCmdInput" placeholder="CMD (hex, напр. 0x93)" style="background: #0f1115; border: 1px solid var(--card-border); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 11px; width: 140px; font-family: monospace;">
+      <select id="devDomainSelect" style="background: #0f1115; border: 1px solid var(--card-border); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 11px; width: 150px;">
+        <option value="0x80">Домен 0x80 (Audio/Sys)</option>
+        <option value="0x00">Домен 0x00 (Dongle)</option>
+      </select>
+      <input type="text" id="devPayloadInput" placeholder="Байты (hex/dec: 08 или 01,00)" style="background: #0f1115; border: 1px solid var(--card-border); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 11px; flex: 1; min-width: 160px; font-family: monospace;">
+      <button id="devSendBtn" class="btn" style="padding: 6px 14px; font-size: 11px;">Отправить</button>
+    </div>
+  </div>
+
   <!-- Diagnostics Log -->
-  <div class="card">
-    <div class="card-title">Лог WebHID</div>
+  <div class="card dev-only" id="devLogCard">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Лог WebHID</span>
+      <button id="clearLogBtn" class="btn btn-secondary" style="padding: 3px 8px; font-size: 10px;">Очистить лог</button>
+    </div>
     <div id="log">Ожидание подключения...</div>
   </div>
 </div>
@@ -1495,6 +1553,65 @@
       } catch (err) {
         log("Ошибка доступа к микрофону: " + err.message);
       }
+    }
+  };
+
+  // 8. Режим разработчика (Dev Mode)
+  function setDevMode(active) {
+    if (active) {
+      document.body.classList.add('dev-mode-active');
+    } else {
+      document.body.classList.remove('dev-mode-active');
+    }
+    const t = document.getElementById('devModeToggle');
+    if (t) t.checked = active;
+    localStorage.setItem('razer_dev_mode', active ? '1' : '0');
+  }
+
+  // Восстановление состояния Dev режима
+  const savedDev = localStorage.getItem('razer_dev_mode') === '1';
+  setDevMode(savedDev);
+
+  document.getElementById('devModeToggle').addEventListener('change', (e) => {
+    setDevMode(e.target.checked);
+  });
+
+  // Очистка лога
+  document.getElementById('clearLogBtn').onclick = () => {
+    const logEl = document.getElementById('log');
+    if (logEl) logEl.innerHTML = '<div>Лог очищен.</div>';
+  };
+
+  // Отправка произвольного пакета в Dev Console
+  document.getElementById('devSendBtn').onclick = async () => {
+    if (!hidDevice || !hidDevice.opened) {
+      alert("Сначала подключите гарнитуру!");
+      return;
+    }
+    try {
+      const cmdRaw = document.getElementById('devCmdInput').value.trim();
+      const domainRaw = document.getElementById('devDomainSelect').value;
+      const payloadRaw = document.getElementById('devPayloadInput').value.trim();
+
+      if (!cmdRaw) {
+        alert("Укажите CMD (например, 0x93)");
+        return;
+      }
+      const cmd = cmdRaw.startsWith('0x') ? parseInt(cmdRaw, 16) : parseInt(cmdRaw, 16);
+      const domain = parseInt(domainRaw, 16);
+      const valBytes = payloadRaw ? payloadRaw.split(',').map(s => {
+        const v = s.trim();
+        return v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10);
+      }) : [];
+
+      const count = valBytes.length;
+      const length = count > 0 ? (4 + count) : 0x04;
+
+      const p = buildReport(length, domain, cmd, count, valBytes);
+      await hidDevice.sendReport(0x02, p);
+      log(`[DEV] Отправлен репорт: CMD=0x${cmd.toString(16)}, Domain=0x${domain.toString(16)}, Count=${count}, Bytes=[${valBytes.join(', ')}]`);
+    } catch (err) {
+      log(`[DEV ОШИБКА] Не удалось отправить пакет: ${err.message}`);
     }
   };
 </script>
