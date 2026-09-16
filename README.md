@@ -144,11 +144,12 @@ Direct register scanning and boundary testing on real hardware (`1532:0565`) ver
 - **Sidetone Volume Limit**: The DSP internal mixer clamps sidetone volume strictly between **`0` and `15`**. Values higher than `15` are clamped down to `15` by the firmware. (Razer Synapse artificially restricted the slider to 0–10).
 - **Sleep Timer Range**: Full 8-bit unsigned integer range from **`0` to `255` minutes** (`0` = disabled).
 - **Accepted Preset Slots (`0x93`)**: The chip strictly recognizes 5 preset slots:
-  - `0x00`: Direct DSP Bypass
+  - `0x00`: Direct DSP Bypass (Flat 0 dB)
   - `0x07`: Factory Game ROM curve
-  - `0x08`: Factory Music ROM curve
+  - `0x08`: Factory Music ROM curve (calibrated TriForce Titanium acoustic tuning in chip ROM)
   - `0x09`: Factory Movie ROM curve
-  - `0xFF`: User Custom Flash memory curve
+  - `0xFF`: User Custom Flash memory curve (10-band Graphic EQ in onboard Flash)
+  *Note on ROM vs Flash*: Factory ROM presets (`0x07`, `0x08`, `0x09`) reside in chip ROM with factory driver compensation. The WebHID controller automatically locks the "Зафиксировать" button when a ROM preset is active to avoid accidentally overwriting factory acoustic tuning, unlocks it when manual sliders are tweaked, and provides instant revert back to the active ROM preset. Physical SmartSwitch button presses on the headset are synchronized via serialized background polling (`0x13`).
 - **Bluetooth Do Not Disturb (`0x27` / `0xA7`)**: `0` = Allow incoming Bluetooth calls during 2.4 GHz gaming; `1` = Silence/block Bluetooth calls during 2.4 GHz gaming.
 - **Dongle Status LED (`0x66` / `0xE6`)**: `0` = Off, `1` = Wireless Link status (white), `2` = Headset battery status (green/yellow/red), `3` = Low-battery warning blink.
 - **Master EQ Processing (`0x1E` / `0x9E`)**: `1` = Active DSP curve processing; `0` = Bypass.

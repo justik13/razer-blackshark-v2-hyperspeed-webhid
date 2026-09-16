@@ -680,7 +680,9 @@
   const frequencies = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
   const eqValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   let savedEqValues = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  let savedPresetKey = 'music';
   let eqDebounceTimer = null;
+  let applyTimer = null;
 
   // Безопасное логирование через DOM textContent (без innerHTML и без риска XSS)
   function log(msg) {
@@ -761,6 +763,7 @@
   window.activatePreset = async function(key) {
     const p = FACTORY_PRESETS[key];
     if (!p) return;
+    savedPresetKey = key;
 
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
     const btn = document.getElementById(`btn_preset_${key}`);
@@ -792,6 +795,12 @@
           await hidDevice.sendReport(0x02, pEnh);
           log(`Активирован заводской ROM-пресет: ${p.name}`);
           document.getElementById('revertEqBtn').disabled = true;
+          const applyBtn = document.getElementById('applyEqBtn');
+          if (applyBtn) {
+            applyBtn.disabled = true;
+            applyBtn.title = "Заводской ROM-пресет уже зафиксирован в гарнитуре";
+          }
+          savedEqValues = [...(p.curve || eqValues)];
           await new Promise(r => setTimeout(r, 60));
           await sendQueryRaw(0x13);
         } else {
@@ -800,6 +809,11 @@
           if (ok) {
             savedEqValues = [...(p.curve || eqValues)];
             document.getElementById('revertEqBtn').disabled = true;
+            const applyBtn = document.getElementById('applyEqBtn');
+            if (applyBtn) {
+              applyBtn.disabled = true;
+              applyBtn.title = "Настройки зафиксированы в гарнитуре";
+            }
           }
         }
       } catch (err) {
@@ -833,6 +847,23 @@
         badge.innerText = "Custom (Flash)";
         badge.dataset.presetId = "0xff";
       }
+
+      // Сбрасываем таймер анимации кнопки "Зафиксировано", если он работал
+      if (applyTimer) {
+        clearTimeout(applyTimer);
+        applyTimer = null;
+      }
+      // Активируем кнопки фиксации и отмены, так как пользователь внес ручные изменения
+      const applyBtn = document.getElementById('applyEqBtn');
+      if (applyBtn) {
+        applyBtn.innerText = "Зафиксировать";
+        applyBtn.style.background = "";
+        applyBtn.style.transform = "";
+        applyBtn.disabled = false;
+        applyBtn.title = "Зафиксировать пользовательские настройки в память гарнитуры";
+      }
+      const revertBtn = document.getElementById('revertEqBtn');
+      if (revertBtn) revertBtn.disabled = false;
 
       triggerEqLivePreview();
     });
@@ -988,9 +1019,9 @@
       // Полная синхронизация текущих настроек
       await syncHeadsetState();
 
-      // Автоматический опрос батареи и кнопки микрофона каждые 15 секунд
+      // Автоматический опрос батареи, микрофона и пресета каждые 5 секунд
       if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(queryStatus, 15000);
+      pollTimer = setInterval(queryStatus, 5000);
     } catch (e) {
       log("Ошибка инициализации: " + e.message);
     }
@@ -1025,7 +1056,18 @@
     if (dndEl) dndEl.disabled = !enabled;
     document.getElementById('sidetoneToggle').disabled = !enabled;
     document.getElementById('sidetoneLevel').disabled = !enabled;
-    document.getElementById('applyEqBtn').disabled = !enabled;
+    const revertBtn = document.getElementById('revertEqBtn');
+    if (revertBtn) revertBtn.disabled = true;
+    const applyBtn = document.getElementById('applyEqBtn');
+    if (applyBtn) {
+      applyBtn.disabled = true;
+      const badge = document.getElementById('activePresetName');
+      const pid = badge ? badge.dataset.presetId : null;
+      const isRom = (pid === '0x00' || pid === '0x07' || pid === '0x08' || pid === '0x09');
+      applyBtn.title = isRom
+        ? "Заводской ROM-пресет уже зафиксирован в гарнитуре"
+        : "Текущие настройки уже зафиксированы в гарнитуре";
+    }
     for (let i = 0; i < 10; i++) {
       document.getElementById(`eqr_${i}`).disabled = !enabled;
     }
@@ -1164,35 +1206,77 @@
     else if (cmd === 0x13) {
       const badge = document.getElementById('activePresetName');
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      const applyBtn = document.getElementById('applyEqBtn');
+      const revertBtn = document.getElementById('revertEqBtn');
+      const isDirty = revertBtn && !revertBtn.disabled;
+
+      let newKey = null;
+      if (val === 0x00) newKey = 'flat';
+      else if (val === 0x07) newKey = 'game';
+      else if (val === 0x08) newKey = 'music';
+      else if (val === 0x09) newKey = 'movie';
+      else if (val === 0xFF) newKey = 'custom';
+
+      const isPresetSwitch = (!isDirty && newKey !== null && newKey !== savedPresetKey) ||
+                             (isDirty && newKey !== null && val !== 0xFF && newKey !== savedPresetKey);
 
       if (val === 0x00) {
         if (badge) { badge.innerText = "Flat (0 dB)"; badge.dataset.presetId = "0x00"; }
         const btn = document.getElementById('btn_preset_flat');
         if (btn) btn.classList.add('active');
-        applyCurveToSliders(FACTORY_PRESETS.flat.curve);
+        if (!isDirty || isPresetSwitch) {
+          savedPresetKey = 'flat';
+          applyCurveToSliders(FACTORY_PRESETS.flat.curve);
+          savedEqValues = [...FACTORY_PRESETS.flat.curve];
+          if (applyBtn) { applyBtn.disabled = true; applyBtn.title = "Заводской ROM-пресет уже зафиксирован в гарнитуре"; }
+          if (revertBtn) revertBtn.disabled = true;
+        }
         log("Активный аппаратный пресет гарнитуры: Flat (0 dB)");
       } else if (val === 0x07) {
         if (badge) { badge.innerText = "Game (ROM)"; badge.dataset.presetId = "0x07"; }
         const btn = document.getElementById('btn_preset_game');
         if (btn) btn.classList.add('active');
-        applyCurveToSliders(FACTORY_PRESETS.game.curve);
+        if (!isDirty || isPresetSwitch) {
+          savedPresetKey = 'game';
+          applyCurveToSliders(FACTORY_PRESETS.game.curve);
+          savedEqValues = [...FACTORY_PRESETS.game.curve];
+          if (applyBtn) { applyBtn.disabled = true; applyBtn.title = "Заводской ROM-пресет уже зафиксирован в гарнитуре"; }
+          if (revertBtn) revertBtn.disabled = true;
+        }
         log("Активный аппаратный пресет гарнитуры: Game (ROM)");
       } else if (val === 0x08) {
         if (badge) { badge.innerText = "Music (ROM)"; badge.dataset.presetId = "0x08"; }
         const btn = document.getElementById('btn_preset_music');
         if (btn) btn.classList.add('active');
-        applyCurveToSliders(FACTORY_PRESETS.music.curve);
+        if (!isDirty || isPresetSwitch) {
+          savedPresetKey = 'music';
+          applyCurveToSliders(FACTORY_PRESETS.music.curve);
+          savedEqValues = [...FACTORY_PRESETS.music.curve];
+          if (applyBtn) { applyBtn.disabled = true; applyBtn.title = "Заводской ROM-пресет уже зафиксирован в гарнитуре"; }
+          if (revertBtn) revertBtn.disabled = true;
+        }
         log("Активный аппаратный пресет гарнитуры: Music (ROM)");
       } else if (val === 0x09) {
         if (badge) { badge.innerText = "Movie (ROM)"; badge.dataset.presetId = "0x09"; }
         const btn = document.getElementById('btn_preset_movie');
         if (btn) btn.classList.add('active');
-        applyCurveToSliders(FACTORY_PRESETS.movie.curve);
+        if (!isDirty || isPresetSwitch) {
+          savedPresetKey = 'movie';
+          applyCurveToSliders(FACTORY_PRESETS.movie.curve);
+          savedEqValues = [...FACTORY_PRESETS.movie.curve];
+          if (applyBtn) { applyBtn.disabled = true; applyBtn.title = "Заводской ROM-пресет уже зафиксирован в гарнитуре"; }
+          if (revertBtn) revertBtn.disabled = true;
+        }
         log("Активный аппаратный пресет гарнитуры: Movie (ROM)");
       } else if (val === 0xFF) {
         if (badge) { badge.innerText = "Custom (Flash)"; badge.dataset.presetId = "0xff"; }
         const btn = document.getElementById('btn_preset_custom');
         if (btn) btn.classList.add('active');
+        if (!isDirty || isPresetSwitch) {
+          savedPresetKey = 'custom';
+          if (applyBtn) { applyBtn.disabled = true; applyBtn.title = "Текущие настройки уже зафиксированы в гарнитуре"; }
+          if (revertBtn) revertBtn.disabled = true;
+        }
         log("Активный аппаратный пресет гарнитуры: Custom (Flash)");
       } else {
         if (badge) { badge.innerText = `Пресет 0x${val.toString(16)}`; badge.dataset.presetId = `0x${val.toString(16)}`; }
@@ -1214,10 +1298,12 @@
       const dspEl = document.getElementById('dspRawValues');
       if (dspEl) dspEl.innerText = `[${rawBands.join(', ')}] dB`;
 
-      // Если активен Custom слот (0xFF), выставляем слайдеры строго по физическому ответу чипа
+      // Если активен Custom слот (0xFF) и нет несохранённых ручных правок, выставляем слайдеры строго по физическому ответу чипа
       const badge = document.getElementById('activePresetName');
       const curPresetId = badge ? badge.dataset.presetId : null;
-      if (curPresetId === '0xff') {
+      const revertBtn = document.getElementById('revertEqBtn');
+      const isDirty = revertBtn && !revertBtn.disabled;
+      if (curPresetId === '0xff' && !isDirty) {
         for (let i = 0; i < 10; i++) {
           eqValues[i] = rawBands[i];
           savedEqValues[i] = rawBands[i];
@@ -1226,7 +1312,7 @@
           const v = document.getElementById(`eqv_${i}`);
           if (v) v.innerText = (rawBands[i] > 0 ? '+' : '') + rawBands[i];
         }
-        document.getElementById('revertEqBtn').disabled = true;
+        if (revertBtn) revertBtn.disabled = true;
       }
       log("Реальный ответ регистра 0x15: [" + rawBands.join(', ') + "] dB");
     }
@@ -1263,14 +1349,16 @@
     return hidMutex.runExclusive(() => sendQueryRaw(cmdByte, domain));
   }
 
-  // Периодический опрос батареи и статуса микрофона (сериализован)
+  // Периодический опрос батареи, микрофона и активного пресета (сериализован)
   async function queryStatus() {
     return hidMutex.runExclusive(async () => {
       await sendQueryRaw(0x21); // Battery
-      await new Promise(r => setTimeout(r, 60));
+      await new Promise(r => setTimeout(r, 50));
       await sendQueryRaw(0x2A); // Charging
-      await new Promise(r => setTimeout(r, 60));
+      await new Promise(r => setTimeout(r, 50));
       await sendQueryRaw(0x55); // Mic mute button
+      await new Promise(r => setTimeout(r, 50));
+      await sendQueryRaw(0x13); // Active preset (синхронизация кнопки SmartSwitch)
     });
   }
 
@@ -1492,6 +1580,11 @@
   // Кнопка «Зафиксировать в гарнитуре» с защитой от ложного успеха
   document.getElementById('applyEqBtn').onclick = async () => {
     const btn = document.getElementById('applyEqBtn');
+    const revertBtn = document.getElementById('revertEqBtn');
+    if (eqDebounceTimer) clearTimeout(eqDebounceTimer);
+
+    btn.disabled = true;
+    if (revertBtn) revertBtn.disabled = true;
 
     // Переключаем статус на Custom (Flash)
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
@@ -1503,11 +1596,11 @@
       badge.dataset.presetId = "0xff";
     }
 
-    btn.disabled = true;
     const success = await sendHardwareEq(eqValues, true);
-    btn.disabled = false;
 
     if (!success) {
+      btn.disabled = false;
+      if (revertBtn) revertBtn.disabled = false;
       const origText = btn.innerText;
       btn.innerText = "✕ Ошибка записи!";
       btn.style.background = "var(--danger)";
@@ -1521,17 +1614,22 @@
     }
 
     savedEqValues = [...eqValues];
-    document.getElementById('revertEqBtn').disabled = true;
+    savedPresetKey = 'custom';
+    if (revertBtn) revertBtn.disabled = true;
 
     // Наглядная визуальная индикация успешной фиксации
     const origText = btn.innerText;
     btn.innerText = "✓ Зафиксировано!";
     btn.style.background = "#33ff33";
     btn.style.transform = "scale(1.04)";
-    setTimeout(() => {
+    if (applyTimer) clearTimeout(applyTimer);
+    applyTimer = setTimeout(() => {
       btn.innerText = origText;
       btn.style.background = "";
       btn.style.transform = "";
+      btn.disabled = true;
+      btn.title = "Текущие настройки уже зафиксированы в гарнитуре";
+      applyTimer = null;
     }, 2000);
 
     log("Текущий профиль эквалайзера зафиксирован в памяти гарнитуры!");
@@ -1539,13 +1637,34 @@
 
   // Кнопка «Отменить изменения» (Revert)
   document.getElementById('revertEqBtn').onclick = async () => {
-    applyCurveToSliders(savedEqValues);
-    const success = await sendHardwareEq(savedEqValues, true);
-    if (success) {
-      document.getElementById('revertEqBtn').disabled = true;
-      log("Изменения отменены. Возвращён профиль: [" + savedEqValues.join(', ') + "] dB");
+    if (eqDebounceTimer) clearTimeout(eqDebounceTimer);
+    if (applyTimer) {
+      clearTimeout(applyTimer);
+      applyTimer = null;
+    }
+    const revertBtn = document.getElementById('revertEqBtn');
+    const applyBtn = document.getElementById('applyEqBtn');
+    if (revertBtn) revertBtn.disabled = true;
+    if (applyBtn) applyBtn.disabled = true;
+
+    if (savedPresetKey && savedPresetKey !== 'custom' && FACTORY_PRESETS[savedPresetKey] && FACTORY_PRESETS[savedPresetKey].isRom) {
+      await activatePreset(savedPresetKey);
+      log(`Изменения отменены. Возвращён заводской пресет: ${FACTORY_PRESETS[savedPresetKey].name}`);
     } else {
-      log("Не удалось вернуть сохранённый профиль эквалайзера.");
+      applyCurveToSliders(savedEqValues);
+      const success = await sendHardwareEq(savedEqValues, true);
+      if (success) {
+        if (applyBtn) {
+          applyBtn.disabled = true;
+          applyBtn.title = "Текущие настройки уже зафиксированы в гарнитуре";
+        }
+        if (revertBtn) revertBtn.disabled = true;
+        log("Изменения отменены. Возвращён профиль: [" + savedEqValues.join(', ') + "] dB");
+      } else {
+        if (revertBtn) revertBtn.disabled = false;
+        if (applyBtn) applyBtn.disabled = false;
+        log("Не удалось вернуть сохранённый профиль эквалайзера.");
+      }
     }
   };
 
