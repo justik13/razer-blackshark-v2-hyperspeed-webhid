@@ -698,6 +698,8 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
 
+  const PREVIEW_DEBOUNCE_MS = 250;
+
   function triggerEqLivePreview() {
     const isLive = document.getElementById('livePreviewToggle').checked;
     if (isLive && hidDevice && hidDevice.opened) {
@@ -705,7 +707,7 @@
       if (eqDebounceTimer) clearTimeout(eqDebounceTimer);
       eqDebounceTimer = setTimeout(() => {
         sendHardwareEq(eqValues, false);
-      }, 60);
+      }, PREVIEW_DEBOUNCE_MS);
     }
   }
 
@@ -726,7 +728,7 @@
       id: 0x09,
       name: "Movie (ROM)",
       isRom: true,
-      curve: [4, 2, 0, -1, 0, 2, 3, 2, 1, 0]
+      curve: [4, 2, 0, -2, 0, 2, 4, 3, 2, 1]
     },
     flat: {
       id: 0x00,
@@ -738,8 +740,8 @@
       id: 0xFF,
       name: "Bass Boost",
       isRom: false,
-      // Чистый глубокий суб-бас на базе чистого профиля Music
-      curve: [4, 2, 1, 0, 0, 0, 1, 2, 3, 2]
+      // Глубокий суб-бас со срезом 250–500 Гц против коробочного резонанса (согласно README)
+      curve: [4, 3, 1, -2, -1, 0, 1, 2, 3, 2]
     },
     custom: {
       id: 0xFF,
@@ -763,36 +765,47 @@
   window.activatePreset = async function(key) {
     const p = FACTORY_PRESETS[key];
     if (!p) return;
-    savedPresetKey = key;
 
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    const btn = document.getElementById(`btn_preset_${key}`);
-    if (btn) btn.classList.add('active');
-
-    const badge = document.getElementById('activePresetName');
-    if (badge) {
-      badge.innerText = p.name;
-      badge.dataset.presetId = `0x${p.id.toString(16)}`;
+    if (!hidDevice || !hidDevice.opened) {
+      savedPresetKey = key;
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById(`btn_preset_${key}`);
+      if (btn) btn.classList.add('active');
+      const badge = document.getElementById('activePresetName');
+      if (badge) {
+        badge.innerText = p.name;
+        badge.dataset.presetId = `0x${p.id.toString(16)}`;
+      }
+      if (p.curve) {
+        applyCurveToSliders(p.curve);
+      }
+      return;
     }
-
-    if (p.curve) {
-      applyCurveToSliders(p.curve);
-    }
-
-    if (!hidDevice || !hidDevice.opened) return;
 
     return hidMutex.runExclusive(async () => {
       try {
         const domain = getAudioDomain();
         if (p.isRom) {
-          // Переключаем в ROM слот чипа
-          const report = buildReport(0x05, domain, 0x93, 0x01, [p.id]);
-          await hidDevice.sendReport(0x02, report);
-          // Активация Master EQ (0x9E = 0x01) и отключение искусственного расширения (0x9D = 0x00)
-          const pEn = buildReport(0x05, domain, 0x9E, 0x01, [0x01]);
-          await hidDevice.sendReport(0x02, pEn);
-          const pEnh = buildReport(0x05, domain, 0x9D, 0x01, [0x00]);
-          await hidDevice.sendReport(0x02, pEnh);
+          const res = await sendCommandAndWaitRaw(0x93, [p.id], domain, 600);
+          if (!res.ok) throw new Error("Нет ответа от чипа на выбор пресета");
+          await sendCommandAndWaitRaw(0x9E, [0x01], domain, 400);
+          await sendCommandAndWaitRaw(0x9D, [0x00], domain, 400);
+
+          savedPresetKey = key;
+          savedEqValues = [...(p.curve || eqValues)];
+          if (p.curve) {
+            applyCurveToSliders(p.curve);
+          }
+
+          document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+          const btn = document.getElementById(`btn_preset_${key}`);
+          if (btn) btn.classList.add('active');
+          const badge = document.getElementById('activePresetName');
+          if (badge) {
+            badge.innerText = p.name;
+            badge.dataset.presetId = `0x${p.id.toString(16)}`;
+          }
+
           log(`Активирован заводской ROM-пресет: ${p.name}`);
           document.getElementById('revertEqBtn').disabled = true;
           const applyBtn = document.getElementById('applyEqBtn');
@@ -800,14 +813,25 @@
             applyBtn.disabled = true;
             applyBtn.title = "Заводской ROM-пресет уже зафиксирован в гарнитуре";
           }
-          savedEqValues = [...(p.curve || eqValues)];
-          await new Promise(r => setTimeout(r, 60));
-          await sendQueryRaw(0x13);
         } else {
           // Записываем пользовательскую кривую в слот Custom 0xFF
           const ok = await sendHardwareEqRaw(p.curve || eqValues, true);
           if (ok) {
+            savedPresetKey = key;
             savedEqValues = [...(p.curve || eqValues)];
+            if (p.curve) {
+              applyCurveToSliders(p.curve);
+            }
+
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.getElementById(`btn_preset_${key}`);
+            if (btn) btn.classList.add('active');
+            const badge = document.getElementById('activePresetName');
+            if (badge) {
+              badge.innerText = p.name;
+              badge.dataset.presetId = `0x${p.id.toString(16)}`;
+            }
+
             document.getElementById('revertEqBtn').disabled = true;
             const applyBtn = document.getElementById('applyEqBtn');
             if (applyBtn) {
@@ -985,6 +1009,16 @@
     }
   };
 
+  function scheduleNextPoll(delayMs = 5000) {
+    if (pollTimer) clearTimeout(pollTimer);
+    pollTimer = setTimeout(async () => {
+      if (hidDevice && hidDevice.opened) {
+        await queryStatus();
+        scheduleNextPoll(5000);
+      }
+    }, delayMs);
+  }
+
   async function initializeDevice(dev) {
     try {
       hidDevice = dev;
@@ -992,8 +1026,11 @@
         await hidDevice.open();
       }
 
-      document.getElementById('connectionStatus').innerText = "● Подключено: " + (hidDevice.productName || "Razer BlackShark V2 HS");
-      document.getElementById('connectionStatus').style.color = "var(--razer)";
+      hidDevice.removeEventListener('inputreport', handleInputReport);
+      hidDevice.addEventListener('inputreport', handleInputReport);
+
+      document.getElementById('connectionStatus').innerText = "● Синхронизация состояния...";
+      document.getElementById('connectionStatus').style.color = "var(--warning)";
       log(`Успешно открыт интерфейс: ${hidDevice.productName} (PID: 0x${hidDevice.productId.toString(16)})`);
 
       // Диагностика HID-коллекций интерфейса
@@ -1012,26 +1049,32 @@
         log("Порт управления Report ID 0x02 готов к обмену данными.");
       }
 
-      enableControls(true);
-
-      hidDevice.addEventListener('inputreport', handleInputReport);
-
-      // Полная синхронизация текущих настроек
+      // 1) Полная синхронизация текущих настроек ДО включения элементов интерфейса
       await syncHeadsetState();
 
-      // Автоматический опрос батареи, микрофона и пресета каждые 5 секунд
-      if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(queryStatus, 5000);
+      // 2) Активация элементов интерфейса строго после успешной синхронизации
+      enableControls(true);
+      document.getElementById('connectionStatus').innerText = "● Подключено: " + (hidDevice.productName || "Razer BlackShark V2 HS");
+      document.getElementById('connectionStatus').style.color = "var(--razer)";
+
+      // 3) Запуск циклического опроса статуса
+      scheduleNextPoll(5000);
     } catch (e) {
       log("Ошибка инициализации: " + e.message);
+      handleDeviceDisconnect();
     }
   }
 
   function handleDeviceDisconnect() {
     enableControls(false);
-    if (pollTimer) clearInterval(pollTimer);
-    if (eqDebounceTimer) clearTimeout(eqDebounceTimer);
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    if (eqDebounceTimer) { clearTimeout(eqDebounceTimer); eqDebounceTimer = null; }
+    if (applyTimer) { clearTimeout(applyTimer); applyTimer = null; }
     stopAudioTest();
+    if (hidDevice) {
+      try { hidDevice.removeEventListener('inputreport', handleInputReport); } catch (_) {}
+      hidDevice = null;
+    }
     document.getElementById('connectionStatus').innerText = "● Не подключено";
     document.getElementById('connectionStatus').style.color = "var(--danger)";
     document.getElementById('batteryNum').innerText = "--%";
@@ -1074,10 +1117,10 @@
   }
 
   // Универсальный упаковщик репорта WebHID со строгой XOR-контрольной суммой MediaTek
-  function buildReport(length, domain, cmd, count, valBytes) {
+  function buildReport(length, domain, cmd, count, valBytes = [], seq = null) {
     const p = new Uint8Array(63);
     p[0] = 0x00;
-    p[1] = nextSeq();
+    p[1] = (seq !== null) ? (seq & 0xFF) : nextSeq();
     p[5] = Math.min(Math.max(4, length), 60);
     p[7] = 0x00; // OUT
     p[8] = domain; // 0x00 for LED, 0x80 for audio/system
@@ -1101,17 +1144,98 @@
     return p;
   }
 
+  // Валидация и парсинг входящих репортов от гарнитуры
+  function parseResponse(data) {
+    if (!data || data.length !== 63) return null;
+    let sum = 0;
+    for (let i = 0; i < 61; i++) {
+      sum ^= data[i];
+    }
+    if (data[61] !== sum) {
+      log(`<- Ошибка контрольной суммы входящего пакета: получено 0x${data[61].toString(16)}, рассчитано 0x${sum.toString(16)}`);
+      return null;
+    }
+    const count = data[11];
+    return {
+      seq: data[1],
+      dir: data[7],
+      domain: data[8],
+      cmd: data[9],
+      status: data[10],
+      count: count,
+      payload: Array.from(data.slice(12, 12 + count)),
+      raw: data
+    };
+  }
+
+  let pendingTx = null;
+
+  async function sendCommandAndWaitRaw(cmdByte, valBytes = [], domain = null, timeoutMs = 800) {
+    if (!hidDevice || !hidDevice.opened) return { ok: false, error: "Устройство не открыто" };
+    const targetDomain = (domain !== null) ? domain : getAudioDomain();
+    const count = valBytes.length;
+    const length = count > 0 ? (4 + count) : 0x04;
+    const seq = nextSeq();
+    const report = buildReport(length, targetDomain, cmdByte, count, valBytes, seq);
+
+    return new Promise(async (resolve) => {
+      let timer = null;
+      pendingTx = {
+        cmd: cmdByte,
+        seq: seq,
+        resolve: (frame) => {
+          if (timer) clearTimeout(timer);
+          pendingTx = null;
+          resolve({ ok: true, frame });
+        }
+      };
+
+      timer = setTimeout(() => {
+        if (pendingTx && pendingTx.seq === seq) {
+          pendingTx = null;
+          log(`Превышен таймаут ответа (${timeoutMs} мс) для команды 0x${cmdByte.toString(16)}`);
+          resolve({ ok: false, error: "Timeout" });
+        }
+      }, timeoutMs);
+
+      try {
+        await hidDevice.sendReport(0x02, report);
+      } catch (err) {
+        if (timer) clearTimeout(timer);
+        pendingTx = null;
+        log(`Ошибка отправки команды 0x${cmdByte.toString(16)}: ${err.message}`);
+        resolve({ ok: false, error: err.message });
+      }
+    });
+  }
+
+  async function sendCommandAndWait(cmdByte, valBytes = [], domain = null, timeoutMs = 800) {
+    return hidMutex.runExclusive(() => sendCommandAndWaitRaw(cmdByte, valBytes, domain, timeoutMs));
+  }
+
   // Обработка входящих репортов гарнитуры
   function handleInputReport(event) {
+    if (event.device && hidDevice && event.device !== hidDevice) return;
     const d = new Uint8Array(event.data.buffer);
     if (event.reportId !== 0x02) {
       log(`<- Нецелевой HID-репорт ID=0x${event.reportId.toString(16)}, длина=${d.length}`);
       return;
     }
-    if (d.length < 13) return;
 
-    // В ответе: d[8]=0x80, d[9]=CMD, d[10]=0x01, d[11]=0x01, d[12]=VALUE
-    const cmd = d[9];
+    const frame = parseResponse(d);
+    if (!frame) return;
+
+    // Разрешение ожидающей транзакции по совпадению seq и cmd
+    if (pendingTx && pendingTx.seq === frame.seq && pendingTx.cmd === frame.cmd) {
+      pendingTx.resolve(frame);
+    }
+
+    processIncomingFrame(frame);
+  }
+
+  function processIncomingFrame(frame) {
+    const d = frame.raw;
+    const cmd = frame.cmd;
     const val = d[12];
 
     // 0x00: Серийный номер
@@ -1333,15 +1457,10 @@
 
   // Базовый запрос без блокировки (для использования внутри монопольных транзакций)
   async function sendQueryRaw(cmdByte, domain = null) {
-    if (!hidDevice || !hidDevice.opened) return;
-    const targetDomain = (domain !== null) ? domain : getAudioDomain();
-    try {
-      const p = buildReport(0x04, targetDomain, cmdByte, 0x00, []);
-      await hidDevice.sendReport(0x02, p);
-      log(`-> Запрос 0x${cmdByte.toString(16)} (домен 0x${targetDomain.toString(16)})`);
-    } catch (e) {
-      log(`Ошибка отправки query 0x${cmdByte.toString(16)}: ${e.message}`);
-    }
+    if (!hidDevice || !hidDevice.opened) return false;
+    log(`-> Запрос 0x${cmdByte.toString(16)}`);
+    const res = await sendCommandAndWaitRaw(cmdByte, [], domain, 600);
+    return res.ok;
   }
 
   // Одиночный публичный запрос с сериализацией в очереди
@@ -1353,11 +1472,8 @@
   async function queryStatus() {
     return hidMutex.runExclusive(async () => {
       await sendQueryRaw(0x21); // Battery
-      await new Promise(r => setTimeout(r, 50));
       await sendQueryRaw(0x2A); // Charging
-      await new Promise(r => setTimeout(r, 50));
       await sendQueryRaw(0x55); // Mic mute button
-      await new Promise(r => setTimeout(r, 50));
       await sendQueryRaw(0x13); // Active preset (синхронизация кнопки SmartSwitch)
     });
   }
@@ -1374,29 +1490,18 @@
     if (modeEl) modeEl.innerText = is24G ? "2.4 GHz Dongle" : "USB-C Wired";
 
     await sendQueryRaw(0x00); // Serial number
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x02); // Firmware version
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x55); // Mic mute button
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x21); // Battery
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x2A); // Charging
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x2C); // Sleep timer
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x27); // Bluetooth DND state
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x18); // Sidetone state
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x19); // Sidetone level
-    await new Promise(r => setTimeout(r, 50));
     if (is24G) {
       await sendQueryRaw(0x66, 0x00); // LED mode (только для 2.4G донгла)
-      await new Promise(r => setTimeout(r, 50));
     }
     await sendQueryRaw(0x13); // Active preset
-    await new Promise(r => setTimeout(r, 50));
     await sendQueryRaw(0x15); // Hardware EQ bands
   }
 
@@ -1417,13 +1522,12 @@
   async function applySleepMinutes(mins) {
     const clamped = Math.max(0, Math.min(255, mins));
     return hidMutex.runExclusive(async () => {
-      try {
-        const p = buildReport(0x05, getAudioDomain(), 0xAC, 0x01, [clamped]);
-        await hidDevice.sendReport(0x02, p);
+      const res = await sendCommandAndWaitRaw(0xAC, [clamped]);
+      if (res.ok) {
         log(`Установлен таймер сна: ${clamped} мин`);
         return true;
-      } catch (err) {
-        log(`Ошибка установки таймера: ${err.message}`);
+      } else {
+        log(`Ошибка установки таймера: ${res.error}`);
         return false;
       }
     });
@@ -1453,12 +1557,11 @@
   document.getElementById('dndToggle').onchange = async (e) => {
     const block = e.target.checked ? 1 : 0;
     return hidMutex.runExclusive(async () => {
-      try {
-        const p = buildReport(0x05, getAudioDomain(), 0xA7, 0x01, [block]);
-        await hidDevice.sendReport(0x02, p);
+      const res = await sendCommandAndWaitRaw(0xA7, [block]);
+      if (res.ok) {
         log(`Режим DND: ${block ? 'Блокировать BT-звонки во время 2.4G (ВКЛ)' : 'Разрешить BT-звонки (ВЫКЛ)'}`);
-      } catch (err) {
-        log(`Ошибка настройки DND: ${err.message}`);
+      } else {
+        log(`Ошибка настройки DND: ${res.error}`);
       }
     });
   };
@@ -1468,12 +1571,11 @@
     const parsed = parseInt(e.target.value);
     const mode = isNaN(parsed) ? 1 : Math.max(0, Math.min(3, parsed));
     return hidMutex.runExclusive(async () => {
-      try {
-        const p = buildReport(0x05, 0x00, 0xE6, 0x01, [mode]);
-        await hidDevice.sendReport(0x02, p);
+      const res = await sendCommandAndWaitRaw(0xE6, [mode], 0x00);
+      if (res.ok) {
         log(`Установлен режим LED донгла: ${mode}`);
-      } catch (err) {
-        log(`Ошибка установки LED: ${err.message}`);
+      } else {
+        log(`Ошибка установки LED: ${res.error}`);
       }
     });
   };
@@ -1486,20 +1588,14 @@
     const domain = getAudioDomain();
 
     return hidMutex.runExclusive(async () => {
-      try {
-        // Шаг 1: активация 0x98
-        const p1 = buildReport(0x05, domain, 0x98, 0x01, [on]);
-        await hidDevice.sendReport(0x02, p1);
-        await new Promise(r => setTimeout(r, 40));
-
-        // Шаг 2: установка громкости 0x99
+      const r1 = await sendCommandAndWaitRaw(0x98, [on], domain);
+      if (r1.ok) {
         if (on) {
-          const p2 = buildReport(0x05, domain, 0x99, 0x01, [lvl]);
-          await hidDevice.sendReport(0x02, p2);
+          await sendCommandAndWaitRaw(0x99, [lvl], domain);
         }
         log(`Sidetone: ${on ? 'ВКЛ (громкость: ' + lvl + ')' : 'ВЫКЛ'}`);
-      } catch (err) {
-        log(`Ошибка Sidetone: ${err.message}`);
+      } else {
+        log(`Ошибка Sidetone: ${r1.error}`);
       }
     });
   };
@@ -1513,12 +1609,11 @@
     const parsed = parseInt(e.target.value);
     const lvl = isNaN(parsed) ? 10 : Math.max(0, Math.min(15, parsed));
     return hidMutex.runExclusive(async () => {
-      try {
-        const p = buildReport(0x05, getAudioDomain(), 0x99, 0x01, [lvl]);
-        await hidDevice.sendReport(0x02, p);
+      const res = await sendCommandAndWaitRaw(0x99, [lvl]);
+      if (res.ok) {
         log(`Громкость Sidetone: ${lvl}`);
-      } catch (err) {
-        log(`Ошибка уровня Sidetone: ${err.message}`);
+      } else {
+        log(`Ошибка уровня Sidetone: ${res.error}`);
       }
     });
   };
@@ -1526,23 +1621,33 @@
   // 6. Запись 10-полосного эквалайзера в память гарнитуры с мгновенной фиксацией в DSP
   async function sendHardwareEqRaw(values, logMessage = true) {
     if (!hidDevice || !hidDevice.opened) return false;
+    if (!Array.isArray(values) || values.length !== 10) {
+      log("Ошибка записи EQ: требуется массив ровно из 10 полос.");
+      return false;
+    }
     try {
       const domain = getAudioDomain();
 
       // 1) Master EQ Enable (0x9E = 0x01) — активация DSP эквалайзера
-      const p1 = buildReport(0x05, domain, 0x9E, 0x01, [0x01]);
-      await hidDevice.sendReport(0x02, p1);
-      await new Promise(r => setTimeout(r, 30));
+      const r1 = await sendCommandAndWaitRaw(0x9E, [0x01], domain);
+      if (!r1.ok) {
+        log(`Не удалось включить Master EQ: ${r1.error}`);
+        return false;
+      }
 
       // 2) Audio Enhancement (0x9D = 0x00) — отключаем искусственное расширение (устраняет эффект бочки!)
-      const p2 = buildReport(0x05, domain, 0x9D, 0x01, [0x00]);
-      await hidDevice.sendReport(0x02, p2);
-      await new Promise(r => setTimeout(r, 30));
+      const r2 = await sendCommandAndWaitRaw(0x9D, [0x00], domain);
+      if (!r2.ok) {
+        log(`Не удалось настроить Audio Enhancement: ${r2.error}`);
+        return false;
+      }
 
       // 3) BS_CMD_PRESET (0x93) — Слот Custom = 0xFF
-      const p3 = buildReport(0x05, domain, 0x93, 0x01, [0xFF]);
-      await hidDevice.sendReport(0x02, p3);
-      await new Promise(r => setTimeout(r, 30));
+      const r3 = await sendCommandAndWaitRaw(0x93, [0xFF], domain);
+      if (!r3.ok) {
+        log(`Не удалось переключить слот на Custom: ${r3.error}`);
+        return false;
+      }
 
       // 4) BS_CMD_EQ (0x95) — 10 полос
       // Аппаратное смещение чипа MediaTek: при записи значение сдвигается на -5.
@@ -1551,21 +1656,25 @@
         const num = (typeof v === 'number' && !isNaN(v)) ? v : parseInt(v);
         return Math.max(-9, Math.min(6, isNaN(num) ? 0 : num)) + 5;
       });
-      const p4 = buildReport(0x0E, domain, 0x95, 0x0A, wireValues);
-      await hidDevice.sendReport(0x02, p4);
-      await new Promise(r => setTimeout(r, 50));
+      const r4 = await sendCommandAndWaitRaw(0x95, wireValues, domain);
+      if (!r4.ok) {
+        log(`Не удалось записать полосы EQ: ${r4.error}`);
+        return false;
+      }
 
       // 5) Повторный селектор пресета (0x93) для гарантированного защелкивания (DSP Latch) в аудиотракт
-      const p5 = buildReport(0x05, domain, 0x93, 0x01, [0xFF]);
-      await hidDevice.sendReport(0x02, p5);
+      const r5 = await sendCommandAndWaitRaw(0x93, [0xFF], domain);
+      if (!r5.ok) {
+        log(`Не удалось зафиксировать пресет в DSP: ${r5.error}`);
+        return false;
+      }
 
       if (logMessage) {
         log("Эквалайзер применён: [" + values.join(', ') + "] dB");
       }
 
       // 6) Запрос реального регистра 0x15 из чипа гарнитуры
-      await new Promise(r => setTimeout(r, 60));
-      await sendQueryRaw(0x15);
+      await sendQueryRaw(0x15, domain);
       return true;
     } catch (err) {
       log("Ошибка записи EQ: " + err.message);
@@ -1803,7 +1912,7 @@
         btn.innerText = "Остановить микрофон";
         btn.classList.remove('btn-secondary');
         btn.classList.add('btn');
-        log("Микрофон активирован в Windows. Аппаратный Sidetone активен!");
+        log("Микрофон активирован в браузере (локальный тест захвата звука).");
 
         micAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (micAudioCtx.state === 'suspended') await micAudioCtx.resume();
@@ -1887,26 +1996,33 @@
       alert("Укажите CMD (например, 0x93)");
       return;
     }
-    const cmd = cmdRaw.startsWith('0x') ? parseInt(cmdRaw, 16) : parseInt(cmdRaw, 16);
+    const cmd = cmdRaw.toLowerCase().startsWith('0x') ? parseInt(cmdRaw, 16) : parseInt(cmdRaw, 10);
     if (isNaN(cmd) || cmd < 0 || cmd > 255) {
-      alert("Некорректная команда (CMD должна быть от 0x00 до 0xFF)");
+      alert("Некорректная команда (CMD должна быть от 0x00 до 0xFF или от 0 до 255)");
       return;
     }
     const domain = parseInt(domainRaw, 16);
-    const valBytes = payloadRaw ? payloadRaw.split(',').map(s => {
-      const v = s.trim();
-      const num = v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10);
-      return isNaN(num) ? 0 : Math.max(0, Math.min(255, num));
-    }) : [];
-
-    const count = valBytes.length;
-    const length = count > 0 ? (4 + count) : 0x04;
+    let valBytes = [];
+    if (payloadRaw) {
+      const parts = payloadRaw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      for (const part of parts) {
+        const num = part.toLowerCase().startsWith('0x') ? parseInt(part, 16) : parseInt(part, 10);
+        if (isNaN(num) || num < 0 || num > 255) {
+          alert(`Некорректный байт в полезной нагрузке: "${part}". Допустимы числа от 0 до 255 или hex (например, 0xFF).`);
+          return;
+        }
+        valBytes.push(num);
+      }
+    }
 
     return hidMutex.runExclusive(async () => {
       try {
-        const p = buildReport(length, domain, cmd, count, valBytes);
-        await hidDevice.sendReport(0x02, p);
-        log(`[DEV] Отправлен репорт: CMD=0x${cmd.toString(16)}, Domain=0x${domain.toString(16)}, Count=${count}, Bytes=[${valBytes.join(', ')}]`);
+        const res = await sendCommandAndWaitRaw(cmd, valBytes, domain, 1000);
+        if (res.ok) {
+          log(`[DEV] Ответ получен для CMD=0x${cmd.toString(16)}: Status=0x${res.frame.status.toString(16)}, Payload=[${res.frame.payload.join(', ')}]`);
+        } else {
+          log(`[DEV ОШИБКА] CMD=0x${cmd.toString(16)}: ${res.error}`);
+        }
       } catch (err) {
         log(`[DEV ОШИБКА] Не удалось отправить пакет: ${err.message}`);
       }
@@ -1925,53 +2041,32 @@
         log("Выполняется сброс гарнитуры к заводским настройкам...");
 
         // 1. Сброс пресета в Music (ROM) 0x08
-        const pPreset = buildReport(0x05, domain, 0x93, 0x01, [0x08]);
-        await hidDevice.sendReport(0x02, pPreset);
-        await new Promise(r => setTimeout(r, 40));
+        await sendCommandAndWaitRaw(0x93, [0x08], domain);
 
         // 2. Master EQ Enable = 1, Audio Enhancement = 0 (чистый Hi-Fi)
-        const pEqEn = buildReport(0x05, domain, 0x9E, 0x01, [0x01]);
-        await hidDevice.sendReport(0x02, pEqEn);
-        await new Promise(r => setTimeout(r, 40));
-
-        const pEnh = buildReport(0x05, domain, 0x9D, 0x01, [0x00]);
-        await hidDevice.sendReport(0x02, pEnh);
-        await new Promise(r => setTimeout(r, 40));
+        await sendCommandAndWaitRaw(0x9E, [0x01], domain);
+        await sendCommandAndWaitRaw(0x9D, [0x00], domain);
 
         // 3. Очистка Custom Flash ячейки (0x95) в чистые нули (0 dB -> wire 5)
         const zeroCurve = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5];
-        const pCurve = buildReport(0x0E, domain, 0x95, 0x0A, zeroCurve);
-        await hidDevice.sendReport(0x02, pCurve);
-        await new Promise(r => setTimeout(r, 40));
+        await sendCommandAndWaitRaw(0x95, zeroCurve, domain);
 
         // Повторное подтверждение пресета Music
-        await hidDevice.sendReport(0x02, pPreset);
-        await new Promise(r => setTimeout(r, 40));
+        await sendCommandAndWaitRaw(0x93, [0x08], domain);
 
         // 4. Сброс Sidetone: выключить (0x98 = 0), громкость 10 (0x99 = 10)
-        const pSideOff = buildReport(0x05, domain, 0x98, 0x01, [0x00]);
-        await hidDevice.sendReport(0x02, pSideOff);
-        await new Promise(r => setTimeout(r, 40));
-
-        const pSideVol = buildReport(0x05, domain, 0x99, 0x01, [10]);
-        await hidDevice.sendReport(0x02, pSideVol);
-        await new Promise(r => setTimeout(r, 40));
+        await sendCommandAndWaitRaw(0x98, [0x00], domain);
+        await sendCommandAndWaitRaw(0x99, [10], domain);
 
         // 5. Сброс таймера сна: 15 минут (0xAC = 15)
-        const pSleep = buildReport(0x05, domain, 0xAC, 0x01, [15]);
-        await hidDevice.sendReport(0x02, pSleep);
-        await new Promise(r => setTimeout(r, 40));
+        await sendCommandAndWaitRaw(0xAC, [15], domain);
 
         // 6. Сброс DND: выключить (0xA7 = 0)
-        const pDnd = buildReport(0x05, domain, 0xA7, 0x01, [0x00]);
-        await hidDevice.sendReport(0x02, pDnd);
-        await new Promise(r => setTimeout(r, 40));
+        await sendCommandAndWaitRaw(0xA7, [0x00], domain);
 
         // 7. Сброс LED донгла: Режим 1 (Статус связи)
         if (hidDevice.productId === PID_24G) {
-          const pLed = buildReport(0x05, 0x00, 0xE6, 0x01, [1]);
-          await hidDevice.sendReport(0x02, pLed);
-          await new Promise(r => setTimeout(r, 40));
+          await sendCommandAndWaitRaw(0xE6, [1], 0x00);
         }
 
         log("Все аппаратные параметры гарнитуры успешно сброшены к заводским.");

@@ -6,7 +6,7 @@
 
 Browser-based hardware controller and protocol documentation for the Razer BlackShark V2 HyperSpeed headset (USB 1532:0565 / 1532:056E).
 
-Runs directly in WebHID-enabled browsers (Chrome, Edge, Brave, Opera) on Windows, macOS, Linux, and ChromeOS without Razer Synapse, background services, or custom kernel modules.
+Runs directly in Chromium-based WebHID-enabled browsers (Chrome, Edge, Brave, Opera) on Windows, macOS, Linux, and ChromeOS without Razer Synapse, background services, or custom kernel modules. *(Note: Firefox and Safari do not support the WebHID API).*
 
 [Launch Live Web Controller](https://justik13.github.io/razer-blackshark-v2-hyperspeed-webhid/)
 
@@ -33,24 +33,24 @@ The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project c
 - **Microphone Sidetone**: Sidetone toggle and hardware volume slider (0–15, accessing the full hardware register range beyond Synapse's 0–10 cap). Includes optional software monitoring with configurable delay (20–400 ms) and VU meter.
 - **10-Band Hardware Equalizer**:
   - Writes directly to headset onboard flash memory. Curves persist across reboots, consoles, mobile devices, and separate PCs.
-  - **Live Preview mode**: Auditions slider adjustments in real time with 60 ms debouncing.
+  - **Live Preview mode**: Auditions slider adjustments in real time with 250 ms debouncing to protect onboard flash memory from excessive write cycles.
   - **DSP Latching**: Sends an immediate re-apply sequence to prevent the firmware from staying one write behind.
   - **Hardware Offset & Dynamic Range Limits**: The MediaTek hardware DSP strictly operates in a **-9 dB to +6 dB** hardware dynamic range (higher/lower values in Synapse are software APO only). Compensates for the internal MediaTek -5 dB storage offset so output stays at full unity volume.
   - **Presets**: Direct hardware access to factory ROM presets (`Music`, `Game`, `Movie`) with authentic Razer curves visualized on sliders, alongside `Flat (0 dB)` (true unity gain without attenuation), refined `Bass Boost` (deep punch with 250–500 Hz scoop to prevent boxy resonance), and `Custom (Flash)`.
   - **Hardware Register Truth**: Live real-time readout of DSP register `0x15` directly confirming the headset's internal silicon gain array.
   - **Audio Test Generator**: Built-in Web Audio tone and noise synthesizer to verify response changes immediately.
 - **WebHID Robustness & Hardware Safety**:
-  - **FIFO Transaction Queue**: Monopolistic `AsyncMutex` serialization prevents race conditions and packet interleaving between background polling (15-second status loop) and user commands.
-  - **Atomic Error Propagation**: Strict boolean error paths ensure the UI never displays false success on flash write errors.
-  - **Interface Isolation**: Strict filtering on `Usage Page 0xFF14`/`0xFF00` and `Report ID 0x02` prevents binding to standard audio/telephony collections.
-  - **Session Protection**: Guarded USB connect listeners prevent device hijacking when connecting secondary USB peripherals.
+  - **FIFO Queue & Response Correlation**: Monopolistic `AsyncMutex` serialization combined with deterministic `sendCommandAndWait` sequence (`seq`) and command (`cmd`) correlation (800 ms timeout) prevents race conditions and packet interleaving between background polling (5-second status loop) and user commands.
+  - **Response Validation & Atomic Error Propagation**: Incoming frames are verified for exact 63-byte length and MediaTek XOR checksum (`d[61]`). Strict boolean error paths ensure the UI state updates only upon confirmed hardware execution.
+  - **Interface Isolation**: Strict filtering on `Usage Page 0xFF14` (primary control interface) and `0xFF00` (fallback) on `Report ID 0x02` prevents binding to standard audio or telephony endpoints.
+  - **Session Protection & Clean Lifecycle**: Event listeners are properly detached on disconnect, timers cleared, and guarded USB connect listeners prevent device hijacking when connecting secondary USB peripherals.
   - **Factory Reset Rollback**: One-click rollback button cleanly restores all hardware registers (Music ROM, 0 dB Flash, Sidetone off, 15m sleep, DND off, LED link) to default factory state.
 
 ---
 
 ## MediaTek Protocol Specification
 
-The BlackShark V2 HyperSpeed communicates through a vendor HID interface on Usage Page `0xFF00`, Usage `0x01`, Interface 3.
+The BlackShark V2 HyperSpeed communicates through a vendor HID interface on Usage Page `0xFF14` (with `0xFF00` fallback), Usage `0x01`, Interface 3.
 
 ### 1. Frame Structure (64 Bytes)
 
@@ -167,6 +167,16 @@ Direct register scanning and boundary testing on real hardware (`1532:0565`) ver
 2. Open `index.html` in Chrome, Edge, or Brave.
 3. Connect the 2.4 GHz wireless dongle or USB-C cable and click **Подключить гарнитуру**.
 4. Select **Razer BlackShark V2 HS 2.4** in the device picker.
+
+---
+
+## Automated Tests
+
+Zero-dependency protocol unit tests covering report frame generation, response parsing, XOR checksum validation, and MediaTek +5 dB EQ offset calculations run directly via Node.js's built-in test runner:
+
+```bash
+node --test tests/protocol.test.mjs
+```
 
 ---
 
