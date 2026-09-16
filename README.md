@@ -98,8 +98,8 @@ payload[61] = checksum;
 | `0x98` | `0x80` | SET | `0x05` | `1` | Enable or disable sidetone (`0` or `1`) |
 | `0x19` | `0x80` / `0x00` | GET | `0x04` | `0` | Sidetone volume query (`0..15`) |
 | `0x99` | `0x80` / `0x00` | SET | `0x05` | `1` | Set sidetone volume level (`0..15`, clamped by chip) |
-| `0x13` | `0x80` | GET | `0x04` | `0` | Active EQ preset query |
-| `0x93` | `0x80` | SET | `0x05` | `1` | Set EQ preset (`0x07` Game, `0x08` Music, `0x09` Movie, `0xFF` Custom) |
+| `0x13` | `0x80` | GET | `0x04` | `0` | Active EQ preset query (`0x00` Flat, `0x07` Game, `0x08` Music, `0x09` Movie, `0xFF` Custom) |
+| `0x93` | `0x80` | SET | `0x05` | `1` | Set EQ preset (`0x00` Flat/Bypass, `0x07` Game, `0x08` Music, `0x09` Movie, `0xFF` Custom) |
 | `0x1E` | `0x80` | GET | `0x04` | `0` | Master EQ enable query |
 | `0x9E` | `0x80` | SET | `0x05` | `1` | Master EQ enable (`0` = Bypass, `1` = Active DSP processing) |
 | `0x1D` | `0x80` | GET | `0x04` | `0` | Audio Enhancement status query |

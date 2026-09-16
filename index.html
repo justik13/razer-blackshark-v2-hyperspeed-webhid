@@ -615,9 +615,9 @@
       curve: [4, 2, 0, -1, 0, 2, 3, 2, 1, 0]
     },
     flat: {
-      id: 0xFF,
+      id: 0x00,
       name: "Flat (0 dB)",
-      isRom: false,
+      isRom: true,
       curve: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     },
     bass: {
@@ -729,7 +729,8 @@
   };
 
   window.selectRomPreset = function(pid, btnEl) {
-    if (pid === 0x07) activatePreset('game');
+    if (pid === 0x00) activatePreset('flat');
+    else if (pid === 0x07) activatePreset('game');
     else if (pid === 0x08) activatePreset('music');
     else if (pid === 0x09) activatePreset('movie');
   };
@@ -1021,7 +1022,13 @@
       const badge = document.getElementById('activePresetName');
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
 
-      if (val === 0x07) {
+      if (val === 0x00) {
+        if (badge) { badge.innerText = "Flat (0 dB)"; badge.dataset.presetId = "0x00"; }
+        const btn = document.getElementById('btn_preset_flat');
+        if (btn) btn.classList.add('active');
+        applyCurveToSliders(FACTORY_PRESETS.flat.curve);
+        log("Активный аппаратный пресет гарнитуры: Flat (0 dB)");
+      } else if (val === 0x07) {
         if (badge) { badge.innerText = "Game (ROM)"; badge.dataset.presetId = "0x07"; }
         const btn = document.getElementById('btn_preset_game');
         if (btn) btn.classList.add('active');
@@ -1067,7 +1074,7 @@
       // Если активен Custom слот (0xFF), выставляем слайдеры строго по физическому ответу чипа
       const badge = document.getElementById('activePresetName');
       const curPresetId = badge ? badge.dataset.presetId : null;
-      if (curPresetId === '0xff' || !curPresetId) {
+      if (curPresetId === '0xff') {
         for (let i = 0; i < 10; i++) {
           eqValues[i] = rawBands[i];
           savedEqValues[i] = rawBands[i];
