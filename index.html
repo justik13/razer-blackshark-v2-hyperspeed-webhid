@@ -453,6 +453,17 @@
         <option value="3">Предупреждение о разряде (Мигающий)</option>
       </select>
     </div>
+
+    <div class="row">
+      <div>
+        <span>Режим «Не беспокоить» (DND)</span>
+        <div style="font-size: 11px; color: var(--text-muted);">Блокировать звонки по Bluetooth во время игры на 2.4G</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="dndToggle" disabled>
+        <span class="slider"></span>
+      </label>
+    </div>
   </div>
 
   <!-- Sidetone -->
@@ -872,6 +883,8 @@
     document.getElementById('sleepSelect').disabled = !enabled;
     const is24G = hidDevice && hidDevice.productId === PID_24G;
     document.getElementById('ledSelect').disabled = !enabled || !is24G;
+    const dndEl = document.getElementById('dndToggle');
+    if (dndEl) dndEl.disabled = !enabled;
     document.getElementById('sidetoneToggle').disabled = !enabled;
     document.getElementById('sidetoneLevel').disabled = !enabled;
     document.getElementById('applyEqBtn').disabled = !enabled;
@@ -972,6 +985,12 @@
       }
       select.value = val;
       log(`Таймер сна гарнитуры: ${val} мин`);
+    }
+    // 0x27: Режим «Не беспокоить» (DND Bluetooth)
+    else if (cmd === 0x27) {
+      const dnd = document.getElementById('dndToggle');
+      if (dnd) dnd.checked = (val > 0);
+      log(`Режим DND (Bluetooth звонки): ${val > 0 ? 'Блокировать (ВКЛ)' : 'Разрешить (ВЫКЛ)'}`);
     }
     // 0x18: Sidetone On/Off
     else if (cmd === 0x18) {
@@ -1119,6 +1138,8 @@
     await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x2C); // Sleep timer
     await new Promise(r => setTimeout(r, 50));
+    await sendQuery(0x27); // Bluetooth DND state
+    await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x18); // Sidetone state
     await new Promise(r => setTimeout(r, 50));
     await sendQuery(0x19); // Sidetone level
@@ -1148,7 +1169,19 @@
     }
   };
 
-  // 2. Режим LED донгла (CMD 0xE6, domain 0x00)
+  // 2. Режим «Не беспокоить» (DND Bluetooth, CMD 0xA7)
+  document.getElementById('dndToggle').onchange = async (e) => {
+    try {
+      const block = e.target.checked ? 1 : 0;
+      const p = buildReport(0x05, getAudioDomain(), 0xA7, 0x01, [block]);
+      await hidDevice.sendReport(0x02, p);
+      log(`Режим DND: ${block ? 'Блокировать BT-звонки во время 2.4G (ВКЛ)' : 'Разрешить BT-звонки (ВЫКЛ)'}`);
+    } catch (err) {
+      log(`Ошибка настройки DND: ${err.message}`);
+    }
+  };
+
+  // 3. Режим LED донгла (CMD 0xE6, domain 0x00)
   document.getElementById('ledSelect').onchange = async (e) => {
     try {
       const mode = parseInt(e.target.value);

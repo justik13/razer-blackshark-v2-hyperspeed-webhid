@@ -81,10 +81,14 @@ payload[61] = checksum;
 
 | Command ID | Domain | Action | Length | Count | Description / Values |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| `0x00` | `0x80` | GET | `0x04` | `0` | Headset Serial Number (15 ASCII characters) |
-| `0x02` | `0x80` | GET | `0x04` | `0` | Firmware Version (4 bytes: major, minor, build, rev) |
+| `0x00` | `0x80` / `0x00` | GET | `0x04` | `0` | Headset / Dongle Serial Number (15 ASCII characters) |
+| `0x02` | `0x80` / `0x00` | GET | `0x04` | `0` | Firmware Version (4 bytes: major, minor, build, rev) |
+| `0x03` | `0x80` / `0x00` | GET | `0x04` | `0` | Hardware USB PID (`0x056E` Headset wired, `0x0565` Dongle) |
+| `0x20` | `0x80` / `0x00` | GET | `0x04` | `0` | Wireless RF link status (`1` = connected, `0` = disconnected) |
 | `0x21` | `0x80` | GET | `0x04` | `0` | Battery level (`0..100%`) |
 | `0x2A` | `0x80` | GET | `0x04` | `0` | Charging state (`0` = battery, `>0` = charging) |
+| `0x27` | `0x80` | GET | `0x04` | `0` | Bluetooth Do Not Disturb (DND) query |
+| `0xA7` | `0x80` | SET | `0x05` | `1` | Set Bluetooth DND (`0` = Allow BT calls, `1` = Block BT calls during 2.4G) |
 | `0x2C` | `0x80` | GET | `0x04` | `0` | Auto power-off timeout query (minutes) |
 | `0xAC` | `0x80` | SET | `0x05` | `1` | Set auto power-off timeout (`0..255` minutes; `0` = off) |
 | `0x55` | `0x80` | GET | `0x04` | `0` | Hardware Mic Mute button status (`0` = unmuted, `1` = muted) |
@@ -93,15 +97,15 @@ payload[61] = checksum;
 | `0x18` | `0x80` | GET | `0x04` | `0` | Sidetone state (`0` = off, `1` = on) |
 | `0x98` | `0x80` | SET | `0x05` | `1` | Enable or disable sidetone (`0` or `1`) |
 | `0x19` | `0x80` / `0x00` | GET | `0x04` | `0` | Sidetone volume query (`0..15`) |
-| `0x99` | `0x80` / `0x00` | SET | `0x05` | `1` | Set sidetone volume level (`0..15`) |
+| `0x99` | `0x80` / `0x00` | SET | `0x05` | `1` | Set sidetone volume level (`0..15`, clamped by chip) |
 | `0x13` | `0x80` | GET | `0x04` | `0` | Active EQ preset query |
 | `0x93` | `0x80` | SET | `0x05` | `1` | Set EQ preset (`0x07` Game, `0x08` Music, `0x09` Movie, `0xFF` Custom) |
 | `0x1E` | `0x80` | GET | `0x04` | `0` | Master EQ enable query |
 | `0x9E` | `0x80` | SET | `0x05` | `1` | Master EQ enable (`0` = Bypass, `1` = Active DSP processing) |
 | `0x1D` | `0x80` | GET | `0x04` | `0` | Audio Enhancement status query |
 | `0x9D` | `0x80` | SET | `0x05` | `1` | Audio Enhancement (`0` = Pure Hi-Fi / Off, `1` = Boomy spatial bass expander) |
-| `0x15` | `0x80` | GET | `0x04` | `0` | Read 10-band EQ curve from active preset |
-| `0x95` | `0x80` | SET | `0x0E` | `10` | Write 10-band EQ curve |
+| `0x15` | `0x80` | GET | `0x04` | `0` | Read 10-band EQ curve from active preset (clamped to `-9..+6 dB`) |
+| `0x95` | `0x80` | SET | `0x0E` | `10` | Write 10-band EQ curve (range: `-9..+6 dB`, wire: `dB + 5`) |
 
 ### 4. Firmware Details
 
@@ -125,6 +129,23 @@ Furthermore, the HyperSpeed microcontroller requires an explicit Master EQ Enabl
 3. `0x93` (`0xFF` Custom slot).
 4. `0x95` (10 band values with +5 offset).
 5. Pause 40 ms, then re-send `0x93` (`0xFF`) to latch the newly committed curve into the live DSP stream immediately.
+
+#### Hardware Limits & Register Boundaries Summary
+
+Direct register scanning and boundary testing on real hardware (`1532:0565`) verified the following physical limits:
+- **Equalizer Gain Range**: Strictly **`-9 dB` to `+6 dB`** across all 10 bands. Values written outside this range are clamped or cause register wrap-around in the MediaTek DSP, which caused UI sliders in older software versions to jump unexpectedly.
+- **Sidetone Volume Limit**: The DSP internal mixer clamps sidetone volume strictly between **`0` and `15`**. Values higher than `15` are clamped down to `15` by the firmware. (Razer Synapse artificially restricted the slider to 0–10).
+- **Sleep Timer Range**: Full 8-bit unsigned integer range from **`0` to `255` minutes** (`0` = disabled).
+- **Accepted Preset Slots (`0x93`)**: The chip strictly recognizes 5 preset slots:
+  - `0x00`: Direct DSP Bypass
+  - `0x07`: Factory Game ROM curve
+  - `0x08`: Factory Music ROM curve
+  - `0x09`: Factory Movie ROM curve
+  - `0xFF`: User Custom Flash memory curve
+- **Bluetooth Do Not Disturb (`0x27` / `0xA7`)**: `0` = Allow incoming Bluetooth calls during 2.4 GHz gaming; `1` = Silence/block Bluetooth calls during 2.4 GHz gaming.
+- **Dongle Status LED (`0x66` / `0xE6`)**: `0` = Off, `1` = Wireless Link status (white), `2` = Headset battery status (green/yellow/red), `3` = Low-battery warning blink.
+- **Master EQ Processing (`0x1E` / `0x9E`)**: `1` = Active DSP curve processing; `0` = Bypass.
+- **Audio Enhancement Expander (`0x1D` / `0x9D`)**: `0` = Off (Pure Hi-Fi, completely eliminates the hollow/barrel sound); `1` = Boomy spatial expander.
 
 ---
 
