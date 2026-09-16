@@ -16,10 +16,11 @@ Runs directly in WebHID-enabled browsers (Chrome, Edge, Brave, Opera) on Windows
 
 | Device | Connection | USB VID:PID | Status |
 | :--- | :--- | :--- | :---: |
-| Razer BlackShark V2 HyperSpeed | 2.4 GHz Wireless Dongle | `1532:0565` | Supported |
+| Razer BlackShark V2 HyperSpeed | 2.4 GHz Wireless Dongle | `1532:0565` | Physically Verified |
 | Razer BlackShark V2 HyperSpeed | USB Type-C Wired | `1532:056E` | Supported |
+| Razer BlackShark V2 HyperSpeed (alt variant) | USB Interface | `1532:0566` | Experimental (Community) |
 
-The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project covers the MediaTek Inc architecture used in HyperSpeed models.
+The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project covers the MediaTek Inc architecture used in HyperSpeed models. PIDs `0565` and `056E` are fully verified on hardware; `0566` is an experimental community target identified in open-source descriptors.
 
 ---
 
@@ -27,7 +28,7 @@ The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project c
 
 - **Device Hardware Info**: Live readout of device serial number (`0x00`), firmware version (`0x02`), physical microphone mute button status (`0x55`), and connection transport mode.
 - **Battery Level and Charging State**: Percentage readout (0–100%) with visual level indicator and USB charging detection (`0x21` / `0x2A`).
-- **Auto Power-Off Timer**: Sleep timer configuration written directly to device memory (`0xAC`). Supports arbitrary timeouts (0–255 minutes; presets include 5, 10, 15, 20, 30, 45, 60, 90, 120 min, or off).
+- **Auto Power-Off Timer**: Sleep timer configuration written directly to device memory (`0xAC`). Supports presets (5, 10, 15, 20, 30, 45, 60, 90, 120 min, or off) and arbitrary custom timeouts (0–255 minutes) via inline number input.
 - **Wireless Dongle LED Control**: Select Off (`0`), link status (white, `1`), battery status (green/yellow/red, `2`), or low-battery warning only (`3`) via register `0xE6`.
 - **Microphone Sidetone**: Sidetone toggle and hardware volume slider (0–15, accessing the full hardware register range beyond Synapse's 0–10 cap). Includes optional software monitoring with configurable delay (20–400 ms) and VU meter.
 - **10-Band Hardware Equalizer**:
@@ -38,6 +39,12 @@ The BlackShark V2 Pro 2023 (1532:0555) uses MXIC protocol frames. This project c
   - **Presets**: Direct hardware access to factory ROM presets (`Music`, `Game`, `Movie`) with authentic Razer curves visualized on sliders, alongside `Flat (0 dB)` (true unity gain without attenuation), refined `Bass Boost` (deep punch with 250–500 Hz scoop to prevent boxy resonance), and `Custom (Flash)`.
   - **Hardware Register Truth**: Live real-time readout of DSP register `0x15` directly confirming the headset's internal silicon gain array.
   - **Audio Test Generator**: Built-in Web Audio tone and noise synthesizer to verify response changes immediately.
+- **WebHID Robustness & Hardware Safety**:
+  - **FIFO Transaction Queue**: Monopolistic `AsyncMutex` serialization prevents race conditions and packet interleaving between background polling (15-second status loop) and user commands.
+  - **Atomic Error Propagation**: Strict boolean error paths ensure the UI never displays false success on flash write errors.
+  - **Interface Isolation**: Strict filtering on `Usage Page 0xFF14`/`0xFF00` and `Report ID 0x02` prevents binding to standard audio/telephony collections.
+  - **Session Protection**: Guarded USB connect listeners prevent device hijacking when connecting secondary USB peripherals.
+  - **Factory Reset Rollback**: One-click rollback button cleanly restores all hardware registers (Music ROM, 0 dB Flash, Sidetone off, 15m sleep, DND off, LED link) to default factory state.
 
 ---
 
