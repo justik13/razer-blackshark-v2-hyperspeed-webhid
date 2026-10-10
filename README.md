@@ -170,16 +170,6 @@ Direct register scanning and boundary testing on real hardware (`1532:0565`) ver
 
 ---
 
-## Automated Tests
-
-Zero-dependency protocol unit tests covering report frame generation, response parsing, XOR checksum validation, and MediaTek +5 dB EQ offset calculations run directly via Node.js's built-in test runner:
-
-```bash
-node --test tests/protocol.test.mjs
-```
-
----
-
 ## License
 
 Distributed under the [MIT License](LICENSE).
